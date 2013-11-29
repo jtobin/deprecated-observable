@@ -1,5 +1,7 @@
 {-# OPTIONS_GHC -Wall #-}
 
+-- NOTE want to hide sampler, Observable constructor, some other stuff..
+
 module Observable.Core where
 
 import Control.Applicative
@@ -37,17 +39,21 @@ observe
   -> Producer a m b
 observe (Observable f) g = forever $ lift (f g) >>= yield
 
--- | Sample from a distribution
+-- | Sample from a distribution.
 sample :: PrimMonad m => Observable m r -> Gen (PrimState m) -> m r
 sample f g = runEffect $ observe f g >-> await
 
--- | Joint (product) distribution.
+-- | Sample from a distribution in the IO monad.
+sampleIO :: Observable IO r -> Gen RealWorld -> IO r
+sampleIO = sample
+
+-- | Joint (independent) distribution.
 joint :: Monad m => m a -> m b -> m (a, b)
 joint = liftM2 (,)
 
--- | Conditional distribution.
-conditional :: Monad m => m a -> (a -> m b) -> m (a, b)
-conditional f g = do
+-- | Joint (conditional) distribution.
+jointConditional :: Monad m => m a -> (a -> m b) -> m (a, b)
+jointConditional f g = do
   x <- f
   y <- g x
   return (x, y)
@@ -59,6 +65,12 @@ unit = Observable MWC.uniform
 -- | Uniform over some range
 uniform :: (PrimMonad m, Variate a) => (a, a) -> Observable m a
 uniform r = Observable $ MWC.uniformR r
+
+-- | Uniform over categories.
+categorical :: PrimMonad m => [a] -> Observable m a
+categorical cs = do
+  j <- uniform (0, length cs - 1)
+  return $ cs !! j
 
 -- | Standard normal variate.
 standardNormal :: PrimMonad m => Observable m Double

@@ -1,6 +1,5 @@
 import Control.Monad
 import Observable.Core
-import Pipes
 import System.Random.MWC
 
 -- | Result of a coin toss.
