@@ -1,5 +1,9 @@
 import Control.Monad
+import Control.Monad.Primitive
 import Observable.Core
+import Observable.MCMC
+import Observable.MCMC.MetropolisHastings
+import Pipes
 import System.Random.MWC
 
 -- | Result of a coin toss.
@@ -25,6 +29,34 @@ betaBinomial n a b = do
   p <- beta a b
   binomial n p
 
-main :: IO ()
-main = randomDraw >>= print
+-- | log-Rosenbrock function.
+lRosenbrock :: RealFloat a => [a] -> a
+lRosenbrock [x0, x1] = (-1) * (5 * (x1 - x0 ^ 2) ^ 2 + 0.05 * (1 - x0) ^ 2)
+
+-- | Gradient of log-Rosenbrock.
+glRosenbrock :: RealFloat a => [a] -> [a]
+glRosenbrock [x, y] =
+  let dx = 20 * x * (y - x ^ 2) + 0.1 * (1 - x)
+      dy = -10 * (y - x ^ 2)
+  in  [dx, dy]
+
+logRosenbrock :: Target Double
+logRosenbrock = createTargetWithGradient lRosenbrock glRosenbrock
+
+compositeMetropolis :: TransitionOperator Double Double
+compositeMetropolis = metropolisTransition 1.0 
+         `interleave` metropolisTransition 0.5 
+         `interleave` metropolisTransition 0.1 
+
+-- you ideally want to get rid of the 'trace' at this point.. hmmm
+logRosenbrockVariate
+  :: PrimMonad m
+  => Trace Double Double -> Int -> Observable m (Trace Double Double)
+logRosenbrockVariate = logRosenbrock `observedIndirectlyBy` compositeMetropolis
+ 
+q0 = Trace [0.0, 0.0] (lRosenbrock [0.0, 0.0]) 0.5
+
+main = do
+  withSystemRandom . asGenIO $ \g ->
+    runEffect $ observe (logRosenbrockVariate q0 100) g >-> printer
 
