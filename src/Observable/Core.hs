@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -Wall #-}
-{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
 module Observable.Core where
 
@@ -7,10 +6,10 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Primitive
 import Control.Monad.Trans
+import Pipes
 import System.Random.MWC hiding (uniform)
 import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWC.Dist
-import Pipes
 
 data Observable m a = Observable { sampler :: Gen (PrimState m) -> m a }
 
@@ -59,7 +58,7 @@ unit = Observable MWC.uniform
 
 -- | Uniform over some range
 uniform :: (PrimMonad m, Variate a) => (a, a) -> Observable m a
-uniform r = Observable $ uniformR r
+uniform r = Observable $ MWC.uniformR r
 
 -- | Standard normal variate.
 standardNormal :: PrimMonad m => Observable m Double
