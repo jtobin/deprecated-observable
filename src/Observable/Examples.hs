@@ -2,7 +2,9 @@ import Control.Monad
 import Control.Monad.Primitive
 import Observable.Core
 import Observable.MCMC
+import Observable.MCMC.Hamiltonian
 import Observable.MCMC.MetropolisHastings
+import Observable.MCMC.NUTS
 import Pipes
 import System.Random.MWC
 
@@ -48,11 +50,23 @@ compositeMetropolis = metropolisTransition 1.0
          `interleave` metropolisTransition 0.5 
          `interleave` metropolisTransition 0.1 
 
+hmc :: TransitionOperator Double Double
+hmc = hamiltonianTransition 1
+
+nuts :: TransitionOperator Double Double
+nuts = nutsTransition 0.1
+
+compositeTransition :: TransitionOperator Double Double
+compositeTransition = metropolisTransition 0.5
+         `interleave` nutsTransition 0.1
+         `interleave` metropolisTransition 0.1
+         `interleave` nutsTransition 0.5
+
 -- you ideally want to get rid of the 'trace' at this point.. hmmm
 logRosenbrockVariate
   :: PrimMonad m
   => Trace Double Double -> Int -> Observable m (Trace Double Double)
-logRosenbrockVariate = logRosenbrock `observedIndirectlyBy` compositeMetropolis
+logRosenbrockVariate = logRosenbrock `observedIndirectlyBy` compositeTransition
  
 q0 = Trace [0.0, 0.0] (lRosenbrock [0.0, 0.0]) 0.5
 

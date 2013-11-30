@@ -47,9 +47,10 @@ observedIndirectlyBy :: Monad m => t -> (t -> StateT s m a) -> s -> Int -> m s
 observedIndirectlyBy = observeIndirectly
 
 -- | Transition operator composition.
---   NOTE need to tweak this to handle heterogeneous 'additional' types.. or
---        just enforce something like 'Double only', if that makes sense..
 interleave :: Monad m => (t -> m a) -> (t -> m b) -> t -> m b
 interleave t0 t1 target = t0 target >> t1 target
 
+handleGradient :: Maybe t -> t
+handleGradient Nothing  = error "handleGradient: no gradient provided"
+handleGradient (Just g) = g
 
