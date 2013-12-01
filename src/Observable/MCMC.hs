@@ -50,6 +50,7 @@ observedIndirectlyBy = observeIndirectly
 interleave :: Monad m => (t -> m a) -> (t -> m b) -> t -> m b
 interleave t0 t1 target = t0 target >> t1 target
 
+-- | Simple gradient error handling.
 handleGradient :: Maybe t -> t
 handleGradient Nothing  = error "handleGradient: no gradient provided"
 handleGradient (Just g) = g

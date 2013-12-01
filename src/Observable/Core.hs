@@ -115,11 +115,11 @@ bernoulli p = (< p) <$> unit
 binomial :: PrimMonad m => Int -> Double -> Observable m Int
 binomial n p = liftM (length . filter id) $ replicateM n (bernoulli p)
 
--- | Receive input from a stream and print it to stdout.
-printer :: Show a => Consumer a IO ()
-printer = forever $ await >>= lift . print
-
 -- | Collect n results.
 collect :: Monad m => Int -> Consumer a m [a]
 collect n = replicateM n await
+
+-- | Receive input from a stream and print it to stdout.
+printer :: Show a => Consumer a IO ()
+printer = forever $ await >>= lift . print
 

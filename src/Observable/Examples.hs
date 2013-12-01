@@ -1,5 +1,7 @@
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Primitive
+import Control.Lens
 import Observable.Core
 import Observable.MCMC
 import Observable.MCMC.Hamiltonian
@@ -31,6 +33,14 @@ betaBinomial n a b = do
   p <- beta a b
   binomial n p
 
+-- | Here's something weird..
+rosenbrockBinomial :: Int -> Observable IO Int
+rosenbrockBinomial n = do
+  rosenbrockDraw <- logRosenbrockVariate q0 100
+  let rawP = exp <$> (rosenbrockDraw^.parameterSpacePosition)
+      p    = last rawP / sum rawP
+  binomial n p 
+
 -- | log-Rosenbrock function.
 lRosenbrock :: RealFloat a => [a] -> a
 lRosenbrock [x0, x1] = (-1) * (5 * (x1 - x0 ^ 2) ^ 2 + 0.05 * (1 - x0) ^ 2)
@@ -59,8 +69,6 @@ nuts = nutsTransition 0.1
 compositeTransition :: TransitionOperator Double Double
 compositeTransition = metropolisTransition 0.5
          `interleave` nutsTransition 0.1
-         `interleave` metropolisTransition 0.1
-         `interleave` nutsTransition 0.5
 
 -- you ideally want to get rid of the 'trace' at this point.. hmmm
 logRosenbrockVariate
@@ -70,7 +78,6 @@ logRosenbrockVariate = logRosenbrock `observedIndirectlyBy` compositeTransition
  
 q0 = Trace [0.0, 0.0] (lRosenbrock [0.0, 0.0]) 0.5
 
-main = do
-  withSystemRandom . asGenIO $ \g ->
-    runEffect $ observe (logRosenbrockVariate q0 100) g >-> printer
-
+main = withSystemRandom . asGenIO $ \g ->
+  -- runEffect $ observe (logRosenbrockVariate q0 100) g >-> printer
+  runEffect $ observe (rosenbrockBinomial 10) g >-> printer
