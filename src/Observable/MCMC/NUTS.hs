@@ -15,7 +15,7 @@ type Gradient   = Parameters -> Parameters
 type Particle   = (Parameters, Parameters)
 
 -- | A single iteration of NUTS.
-nutsTransition :: Double -> TransitionOperator Double Double
+nutsTransition :: Double -> TransitionOperator Double
 nutsTransition e target = do
     t    <- use parameterSpacePosition
     r0   <- replicateM (length t) (lift $ normal 0 1)

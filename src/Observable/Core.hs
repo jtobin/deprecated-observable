@@ -1,7 +1,5 @@
 {-# OPTIONS_GHC -Wall #-}
 
--- NOTE want to hide sampler, Observable constructor, some other stuff..
-
 module Observable.Core where
 
 import Control.Applicative
@@ -13,7 +11,7 @@ import System.Random.MWC hiding (uniform)
 import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWC.Dist
 
-data Observable m a = Observable { sampler :: Gen (PrimState m) -> m a }
+data Observable m a = Observable { sample :: Gen (PrimState m) -> m a }
 
 instance PrimMonad m => Functor (Observable m) where
   fmap h (Observable f) = Observable $ liftM h . f
@@ -25,8 +23,8 @@ instance PrimMonad m => Applicative (Observable m) where
 instance PrimMonad m => Monad (Observable m) where
   return x = Observable $ const (return x)
   m >>= h  = Observable $ \g -> do
-    z <- sampler m g
-    sampler (h z) g
+    z <- sample m g
+    sample (h z) g
 
 instance MonadTrans Observable where
   lift m = Observable $ const m
@@ -38,10 +36,6 @@ observe
   -> Gen (PrimState m)
   -> Producer a m b
 observe (Observable f) g = forever $ lift (f g) >>= yield
-
--- | Sample from a distribution.
-sample :: PrimMonad m => Observable m r -> Gen (PrimState m) -> m r
-sample f g = runEffect $ observe f g >-> await
 
 -- | Sample from a distribution in the IO monad.
 sampleIO :: Observable IO r -> Gen RealWorld -> IO r
@@ -115,11 +109,11 @@ bernoulli p = (< p) <$> unit
 binomial :: PrimMonad m => Int -> Double -> Observable m Int
 binomial n p = liftM (length . filter id) $ replicateM n (bernoulli p)
 
+-- | Receive input from a stream and print it to stdout.
+display :: Show a => Consumer a IO ()
+display = forever $ await >>= lift . print
+
 -- | Collect n results.
 collect :: Monad m => Int -> Consumer a m [a]
 collect n = replicateM n await
-
--- | Receive input from a stream and print it to stdout.
-printer :: Show a => Consumer a IO ()
-printer = forever $ await >>= lift . print
 

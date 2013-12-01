@@ -32,7 +32,7 @@ nextState z target e current proposed
     acceptProb | isNaN arRatio = 0
                | otherwise     = arRatio
 
-metropolisTransition :: Double -> TransitionOperator Double Double
+metropolisTransition :: Double -> TransitionOperator Double
 metropolisTransition e t = do
   current  <- use parameterSpacePosition
   zc       <- lift $ unit

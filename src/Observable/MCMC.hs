@@ -14,28 +14,31 @@ data Target a = Target {
   , _gradient  :: Maybe ([a] -> [a])
   }
 
-data Trace a e = Trace {
+data Trace a = Trace {
     _parameterSpacePosition :: [a]
   , _dataSpacePosition      :: Double
-  , _optionalInformation    :: e
+  , _optionalInformation    :: Double
   }
 
-instance Show a => Show (Trace a e) where
+instance Show a => Show (Trace a) where
   show = show . _parameterSpacePosition
 
-type TransitionOperator a e =
-  forall m. PrimMonad m => Target a -> StateT (Trace a e) (Observable m) [a]
+type TransitionOperator a =
+  forall m. PrimMonad m => Target a -> StateT (Trace a) (Observable m) [a]
 
 makeLenses ''Trace
 makeLenses ''Target
 
+-- | Target constructor using a gradient.
 createTargetWithGradient :: ([a] -> Double) -> ([a] -> [a]) -> Target a
 createTargetWithGradient f g  = Target f (Just g)
 
+-- | Target constructor sans gradient.
 createTargetWithoutGradient :: ([a] -> Double) -> Target a
 createTargetWithoutGradient f = Target f Nothing
 
-initializeTrace :: Target a -> [a] -> e -> Trace a e
+-- | Trace constructor.
+initializeTrace :: Target a -> [a] -> Double -> Trace a
 initializeTrace t as = Trace as (t^.objective $ as)
 
 -- | Sample from some distribution indirectly via MCMC.

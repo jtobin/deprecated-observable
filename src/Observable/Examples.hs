@@ -55,25 +55,25 @@ glRosenbrock [x, y] =
 logRosenbrock :: Target Double
 logRosenbrock = createTargetWithGradient lRosenbrock glRosenbrock
 
-compositeMetropolis :: TransitionOperator Double Double
+compositeMetropolis :: TransitionOperator Double
 compositeMetropolis = metropolisTransition 1.0 
          `interleave` metropolisTransition 0.5 
          `interleave` metropolisTransition 0.1 
 
-hmc :: TransitionOperator Double Double
+hmc :: TransitionOperator Double
 hmc = hamiltonianTransition 1
 
-nuts :: TransitionOperator Double Double
+nuts :: TransitionOperator Double
 nuts = nutsTransition 0.1
 
-compositeTransition :: TransitionOperator Double Double
+compositeTransition :: TransitionOperator Double
 compositeTransition = metropolisTransition 0.5
          `interleave` nutsTransition 0.1
 
 -- you ideally want to get rid of the 'trace' at this point.. hmmm
 logRosenbrockVariate
   :: PrimMonad m
-  => Trace Double Double -> Int -> Observable m (Trace Double Double)
+  => Trace Double -> Int -> Observable m (Trace Double)
 logRosenbrockVariate = logRosenbrock `observedIndirectlyBy` compositeTransition
  
 q0 = Trace [0.0, 0.0] (lRosenbrock [0.0, 0.0]) 0.5
