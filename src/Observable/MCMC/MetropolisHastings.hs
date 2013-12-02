@@ -1,29 +1,33 @@
 {-# LANGUAGE RankNTypes #-}
 
-module Observable.MCMC.MetropolisHastings (metropolisTransition) where
+module Observable.MCMC.MetropolisHastings (metropolisHastings) where
 
 import Control.Lens
 import Control.Monad.Primitive
 import Control.Monad.State.Strict
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 import Observable.Core
 import Observable.MCMC
 import Statistics.Distribution
 import Statistics.Distribution.Normal
 
-isoGauss ::  [Double] -> [Double] -> Double -> Double
-isoGauss xs mu s = product $ zipWith density nds xs
-  where nds = map (`normalDistr` s) mu
+isoGauss :: Vector Double -> Vector Double -> Double -> Double
+isoGauss xs mu s = V.product $ V.zipWith density nds xs
+  where nds = V.map (`normalDistr` s) mu
 
-perturb :: PrimMonad m => [Double] -> Double -> Observable m [Double]
-perturb q e = mapM (`normal` e) q
+perturb :: PrimMonad m
+        => Vector Double -> Double -> Observable m (Vector Double)
+perturb q e = V.mapM (`normal` e) q
 
-acceptRejectRatio :: Target Double -> Double -> [Double] -> [Double] -> Double
+acceptRejectRatio
+  :: Target Double -> Double -> Vector Double -> Vector Double -> Double
 acceptRejectRatio target e current proposed = exp . min 0 $
     (target^.objective) proposed + log (isoGauss current proposed e)
   - (target^.objective) current  - log (isoGauss proposed current e)
 
 nextState
-  :: Double -> Target Double -> Double -> [Double] -> [Double] -> [Double]
+  :: Double -> Target Double -> Double -> Vector Double -> Vector Double -> Vector Double
 nextState z target e current proposed
     | z < acceptProb = proposed
     | otherwise      = current
@@ -32,8 +36,8 @@ nextState z target e current proposed
     acceptProb | isNaN arRatio = 0
                | otherwise     = arRatio
 
-metropolisTransition :: Double -> TransitionOperator Double
-metropolisTransition e t = do
+metropolisHastings :: Double -> TransitionOperator Double
+metropolisHastings e t = do
   current  <- use parameterSpacePosition
   zc       <- lift $ unit
   proposed <- lift $ perturb current e

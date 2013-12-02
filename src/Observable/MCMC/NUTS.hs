@@ -6,19 +6,21 @@ import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.State.Strict
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 import Observable.Core
 import Observable.MCMC
 
-type Parameters = [Double] 
+type Parameters = Vector Double
 type Density    = Parameters -> Double
 type Gradient   = Parameters -> Parameters
 type Particle   = (Parameters, Parameters)
 
 -- | A single iteration of NUTS.
-nutsTransition :: Double -> TransitionOperator Double
-nutsTransition e target = do
+nuts :: Double -> TransitionOperator Double
+nuts e target = do
     t    <- use parameterSpacePosition
-    r0   <- replicateM (length t) (lift $ normal 0 1)
+    r0   <- V.replicateM (V.length t) (lift $ normal 0 1)
     z0   <- lift $ exponential 1
     let logu = log (auxilliaryTarget lTarget t r0) - z0
 
@@ -91,7 +93,8 @@ buildTree lTarget glTarget t r logu v j e = do
   else return (tn, rn, tp, rp, t0, n0, s0)
 
 -- | Determine whether or not to stop doubling the tree of candidate states.
-stopCriterion :: (Integral a, Num b, Ord b) => [b] -> [b] -> [b] -> [b] -> a
+stopCriterion :: (Integral a, Num b, Ord b)
+  => Vector b -> Vector b -> Vector b -> Vector b -> a
 stopCriterion tn tp rn rp = 
       indicate (positionDifference `innerProduct` rn >= 0)
     * indicate (positionDifference `innerProduct` rp >= 0)
@@ -107,37 +110,39 @@ leapfrog glTarget (t, r) e = (tf, rf)
     rf = adjustMomentum glTarget e tf rm
 
 -- | Adjust momentum.
-adjustMomentum :: Fractional c => (t -> [c]) -> c -> t -> [c] -> [c]
+adjustMomentum :: Fractional c
+  => (t -> Vector c) -> c -> t -> Vector c -> Vector c
 adjustMomentum glTarget e t r = r .+ ((e / 2) .* glTarget t)
 
 -- | Adjust position.
-adjustPosition :: Num c => c -> [c] -> [c] -> [c]
+adjustPosition :: Num c => c -> Vector c -> Vector c -> Vector c
 adjustPosition e r t = t .+ (e .* r)
 
 -- | The MH acceptance ratio for a given proposal.
-acceptanceRatio :: Floating a => (t -> a) -> t -> t -> [a] -> [a] -> a
+acceptanceRatio :: Floating a
+  => (t -> a) -> t -> t -> Vector a -> Vector a -> a
 acceptanceRatio lTarget t0 t1 r0 r1 = auxilliaryTarget lTarget t1 r1
                                     / auxilliaryTarget lTarget t0 r0
 
 -- | The negative potential. 
-auxilliaryTarget :: Floating a => (t -> a) -> t -> [a] -> a
+auxilliaryTarget :: Floating a => (t -> a) -> t -> Vector a -> a
 auxilliaryTarget lTarget t r = exp (lTarget t - 0.5 * innerProduct r r)
 
 -- | Simple inner product.
-innerProduct :: Num a => [a] -> [a] -> a
-innerProduct xs ys = sum $ zipWith (*) xs ys
+innerProduct :: Num a => Vector a -> Vector a -> a
+innerProduct xs ys = V.sum $ V.zipWith (*) xs ys
 
 -- | Vectorized multiplication.
-(.*) :: Num b => b -> [b] -> [b]
-z .* xs = map (* z) xs
+(.*) :: Num a => a -> Vector a -> Vector a
+z .* xs = V.map (* z) xs
 
 -- | Vectorized subtraction.
-(.-) :: Num a => [a] -> [a] -> [a]
-xs .- ys = zipWith (-) xs ys
+(.-) :: Num a => Vector a -> Vector a -> Vector a
+xs .- ys = V.zipWith (-) xs ys
 
 -- | Vectorized addition.
-(.+) :: Num a => [a] -> [a] -> [a]
-xs .+ ys = zipWith (+) xs ys
+(.+) :: Num a => Vector a -> Vector a -> Vector a
+xs .+ ys = V.zipWith (+) xs ys
 
 -- | Indicator function.
 indicate :: Integral a => Bool -> a

@@ -7,15 +7,16 @@ module Observable.MCMC where
 import Control.Lens
 import Control.Monad.Primitive
 import Control.Monad.State.Strict
+import Data.Vector (Vector)
 import Observable.Core
 
 data Target a = Target {
-    _objective :: [a] -> Double
-  , _gradient  :: Maybe ([a] -> [a])
+    _objective :: Vector a -> Double
+  , _gradient  :: Maybe (Vector a -> Vector a)
   }
 
 data Trace a = Trace {
-    _parameterSpacePosition :: [a]
+    _parameterSpacePosition :: Vector a
   , _dataSpacePosition      :: Double
   , _optionalInformation    :: Double
   }
@@ -23,22 +24,23 @@ data Trace a = Trace {
 instance Show a => Show (Trace a) where
   show = show . _parameterSpacePosition
 
-type TransitionOperator a =
-  forall m. PrimMonad m => Target a -> StateT (Trace a) (Observable m) [a]
+type TransitionOperator a = forall m. PrimMonad m =>
+  Target a -> StateT (Trace a) (Observable m) (Vector a)
 
 makeLenses ''Trace
 makeLenses ''Target
 
 -- | Target constructor using a gradient.
-createTargetWithGradient :: ([a] -> Double) -> ([a] -> [a]) -> Target a
+createTargetWithGradient
+  :: (Vector a -> Double) -> (Vector a -> Vector a) -> Target a
 createTargetWithGradient f g  = Target f (Just g)
 
 -- | Target constructor sans gradient.
-createTargetWithoutGradient :: ([a] -> Double) -> Target a
+createTargetWithoutGradient :: (Vector a -> Double) -> Target a
 createTargetWithoutGradient f = Target f Nothing
 
 -- | Trace constructor.
-initializeTrace :: Target a -> [a] -> Double -> Trace a
+initializeTrace :: Target a -> Vector a -> Double -> Trace a
 initializeTrace t as = Trace as (t^.objective $ as)
 
 -- | Sample from some distribution indirectly via MCMC.

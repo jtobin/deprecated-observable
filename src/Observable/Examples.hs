@@ -2,9 +2,10 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Primitive
 import Control.Lens
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 import Observable.Core
 import Observable.MCMC
-import Observable.MCMC.Hamiltonian
 import Observable.MCMC.MetropolisHastings
 import Observable.MCMC.NUTS
 import Pipes
@@ -38,37 +39,33 @@ rosenbrockBinomial :: Int -> Observable IO Int
 rosenbrockBinomial n = do
   rosenbrockDraw <- logRosenbrockVariate q0 100
   let rawP = exp <$> (rosenbrockDraw^.parameterSpacePosition)
-      p    = last rawP / sum rawP
+      p    = V.last rawP / V.sum rawP
   binomial n p 
 
 -- | log-Rosenbrock function.
-lRosenbrock :: RealFloat a => [a] -> a
-lRosenbrock [x0, x1] = (-1) * (5 * (x1 - x0 ^ 2) ^ 2 + 0.05 * (1 - x0) ^ 2)
+lRosenbrock :: RealFloat a => Vector a -> a
+lRosenbrock xs = let [x0, x1] = V.toList xs
+                 in  (-1) * (5 * (x1 - x0 ^ 2) ^ 2 + 0.05 * (1 - x0) ^ 2)
 
 -- | Gradient of log-Rosenbrock.
-glRosenbrock :: RealFloat a => [a] -> [a]
-glRosenbrock [x, y] =
-  let dx = 20 * x * (y - x ^ 2) + 0.1 * (1 - x)
+glRosenbrock :: RealFloat a => Vector a -> Vector a
+glRosenbrock xs =
+  let [x, y] = V.toList xs
+      dx = 20 * x * (y - x ^ 2) + 0.1 * (1 - x)
       dy = -10 * (y - x ^ 2)
-  in  [dx, dy]
+  in  V.fromList [dx, dy]
 
 logRosenbrock :: Target Double
 logRosenbrock = createTargetWithGradient lRosenbrock glRosenbrock
 
 compositeMetropolis :: TransitionOperator Double
-compositeMetropolis = metropolisTransition 1.0 
-         `interleave` metropolisTransition 0.5 
-         `interleave` metropolisTransition 0.1 
-
-hmc :: TransitionOperator Double
-hmc = hamiltonianTransition 1
-
-nuts :: TransitionOperator Double
-nuts = nutsTransition 0.1
+compositeMetropolis = metropolisHastings 1.0 
+         `interleave` metropolisHastings 0.5 
+         `interleave` metropolisHastings 0.1 
 
 compositeTransition :: TransitionOperator Double
-compositeTransition = metropolisTransition 0.5
-         `interleave` nutsTransition 0.1
+compositeTransition = metropolisHastings 0.5
+         `interleave` nuts 0.1
 
 -- you ideally want to get rid of the 'trace' at this point.. hmmm
 logRosenbrockVariate
@@ -76,8 +73,8 @@ logRosenbrockVariate
   => Trace Double -> Int -> Observable m (Trace Double)
 logRosenbrockVariate = logRosenbrock `observedIndirectlyBy` compositeTransition
  
-q0 = Trace [0.0, 0.0] (lRosenbrock [0.0, 0.0]) 0.5
+q0 = Trace (V.fromList [0.0, 0.0]) (lRosenbrock (V.fromList [0.0, 0.0])) 0.5
 
 main = withSystemRandom . asGenIO $ \g ->
-  -- runEffect $ observe (logRosenbrockVariate q0 100) g >-> printer
-  runEffect $ observe (rosenbrockBinomial 10) g >-> printer
+  runEffect $ observe (logRosenbrockVariate q0 100) g >-> display
+  -- runEffect $ observe (rosenbrockBinomial 10) g >-> display
