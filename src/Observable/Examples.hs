@@ -8,8 +8,11 @@ import Observable.Core
 import Observable.MCMC
 import Observable.MCMC.MetropolisHastings
 import Observable.MCMC.NUTS
+import Observable.MCMC.Slice
 import Pipes
 import System.Random.MWC
+
+import Debug.Trace
 
 -- | Result of a coin toss.
 data Toss = Head | Tail deriving Show
@@ -66,6 +69,7 @@ compositeMetropolis = metropolisHastings 1.0
 compositeTransition :: TransitionOperator Double
 compositeTransition = metropolisHastings 0.5
          `interleave` nuts 0.1
+         `interleave` slice 0.4
 
 -- you ideally want to get rid of the 'trace' at this point.. hmmm
 logRosenbrockVariate
@@ -76,5 +80,5 @@ logRosenbrockVariate = logRosenbrock `observedIndirectlyBy` compositeTransition
 q0 = Trace (V.fromList [0.0, 0.0]) (lRosenbrock (V.fromList [0.0, 0.0])) 0.5
 
 main = withSystemRandom . asGenIO $ \g ->
+  -- sampleIO (logRosenbrockVariate q0 100) g >>= print
   runEffect $ observe (logRosenbrockVariate q0 100) g >-> display
-  -- runEffect $ observe (rosenbrockBinomial 10) g >-> display
