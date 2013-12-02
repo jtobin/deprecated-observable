@@ -44,22 +44,31 @@ initializeTrace :: Target a -> Vector a -> Double -> Trace a
 initializeTrace t as = Trace as (t^.objective $ as)
 
 -- | Sample from some distribution indirectly via MCMC.
-observeIndirectly :: Monad m => t -> (t -> StateT s m a) -> s -> Int -> m s
+observeIndirectly
+  :: PrimMonad m
+  => Target a
+  -> Transition a
+  -> Trace a
+  -> Int
+  -> Observable m (Trace a)
 observeIndirectly f t o n = replicateM_ n (t f) `execStateT` o
 
 -- | Better infix syntax for observeIndirectly.
-observedIndirectlyBy :: Monad m => t -> (t -> StateT s m a) -> s -> Int -> m s
+observedIndirectlyBy
+  :: PrimMonad m
+  => Target a
+  -> Transition a
+  -> Trace a
+  -> Int
+  -> Observable m (Trace a)
 observedIndirectlyBy = observeIndirectly
 
 -- | Transition operator composition.
-interleave :: Monad m => (t -> m a) -> (t -> m b) -> t -> m b
+interleave :: Transition a -> Transition a -> Transition a
 interleave t0 t1 target = t0 target >> t1 target
 
 -- | Transition operator sampling.
-randomlyInterleave
-  :: Transition a
-  -> Transition a
-  -> Transition a
+randomlyInterleave :: Transition a -> Transition a -> Transition a
 randomlyInterleave t0 t1 target = do
   s <- lift $ categorical [t0, t1]
   s target
