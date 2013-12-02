@@ -27,7 +27,12 @@ acceptRejectRatio target e current proposed = exp . min 0 $
   - (target^.objective) current  - log (isoGauss proposed current e)
 
 nextState
-  :: Double -> Target Double -> Double -> Vector Double -> Vector Double -> Vector Double
+  :: Double
+  -> Target Double
+  -> Double
+  -> Vector Double
+  -> Vector Double
+  -> Vector Double
 nextState z target e current proposed
     | z < acceptProb = proposed
     | otherwise      = current
@@ -36,7 +41,7 @@ nextState z target e current proposed
     acceptProb | isNaN arRatio = 0
                | otherwise     = arRatio
 
-metropolisHastings :: Double -> TransitionOperator Double
+metropolisHastings :: Double -> Transition Double
 metropolisHastings e t = do
   current  <- use parameterSpacePosition
   zc       <- lift $ unit

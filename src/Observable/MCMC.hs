@@ -24,7 +24,7 @@ data Trace a = Trace {
 instance Show a => Show (Trace a) where
   show = show . _parameterSpacePosition
 
-type TransitionOperator a = forall m. PrimMonad m =>
+type Transition a = forall m. PrimMonad m =>
   Target a -> StateT (Trace a) (Observable m) (Vector a)
 
 makeLenses ''Trace

@@ -37,14 +37,6 @@ betaBinomial n a b = do
   p <- beta a b
   binomial n p
 
--- | Here's something weird..
-rosenbrockBinomial :: Int -> Observable IO Int
-rosenbrockBinomial n = do
-  rosenbrockDraw <- logRosenbrockVariate q0 100
-  let rawP = exp <$> (rosenbrockDraw^.parameterSpacePosition)
-      p    = V.last rawP / V.sum rawP
-  binomial n p 
-
 -- | log-Rosenbrock function.
 lRosenbrock :: RealFloat a => Vector a -> a
 lRosenbrock xs = let [x0, x1] = V.toList xs
@@ -61,24 +53,27 @@ glRosenbrock xs =
 logRosenbrock :: Target Double
 logRosenbrock = createTargetWithGradient lRosenbrock glRosenbrock
 
-compositeMetropolis :: TransitionOperator Double
+compositeMetropolis :: Transition Double
 compositeMetropolis = metropolisHastings 1.0 
          `interleave` metropolisHastings 0.5 
          `interleave` metropolisHastings 0.1 
 
-compositeTransition :: TransitionOperator Double
+compositeTransition :: Transition Double
 compositeTransition = metropolisHastings 0.5
          `interleave` nuts 0.1
          `interleave` slice 0.4
 
--- you ideally want to get rid of the 'trace' at this point.. hmmm
-logRosenbrockVariate
-  :: PrimMonad m
-  => Trace Double -> Int -> Observable m (Trace Double)
-logRosenbrockVariate = logRosenbrock `observedIndirectlyBy` compositeTransition
- 
-q0 = Trace (V.fromList [0.0, 0.0]) (lRosenbrock (V.fromList [0.0, 0.0])) 0.5
+logRosenbrockVariate :: PrimMonad m => Observable m (Trace Double)
+logRosenbrockVariate =
+    observeIndirectly logRosenbrock compositeTransition q0 100
+  where q0 = initializeTrace logRosenbrock (V.fromList [0.0, 0.0]) 0.5
 
-main = withSystemRandom . asGenIO $ \g ->
+main :: IO ()
+main = do
+  zs <- observeConcurrently 1000 logRosenbrockVariate
+  mapM_ print zs
+
+  --   withSystemRandom . asGenIO $ \g -> 
   -- sampleIO (logRosenbrockVariate q0 100) g >>= print
-  runEffect $ observe (logRosenbrockVariate q0 100) g >-> display
+  -- runEffect $ observe (logRosenbrockVariate q0 100) g >-> display
+

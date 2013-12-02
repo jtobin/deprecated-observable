@@ -16,7 +16,7 @@ import Observable.MCMC
 import System.Random.MWC hiding (uniform)
 
 -- | A multivariate slice sampler.
-slice :: Double -> TransitionOperator Double
+slice :: Double -> Transition Double
 slice e t = do
   currentPosition <- use parameterSpacePosition
   let n = V.length currentPosition

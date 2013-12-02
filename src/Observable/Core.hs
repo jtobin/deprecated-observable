@@ -3,6 +3,7 @@
 module Observable.Core where
 
 import Control.Applicative
+import Control.Concurrent.Async
 import Control.Monad
 import Control.Monad.Primitive
 import Control.Monad.Trans
@@ -36,6 +37,11 @@ observe
   -> Gen (PrimState m)
   -> Producer a m b
 observe (Observable f) g = forever $ lift (f g) >>= yield
+
+-- | Sample from a distribution concurrently in the IO monad.
+observeConcurrently :: Int -> Observable IO b -> IO [b]
+observeConcurrently n (Observable f) = mapConcurrently h (replicate n ())
+  where h x = withSystemRandom . asGenIO $ \g -> f g
 
 -- | Sample from a distribution in the IO monad.
 sampleIO :: Observable IO r -> Gen RealWorld -> IO r
