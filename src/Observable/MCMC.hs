@@ -18,7 +18,7 @@ data Target a = Target {
 data Trace a = Trace {
     _parameterSpacePosition :: Vector a
   , _dataSpacePosition      :: Double
-  , _optionalInformation    :: Double
+  , _optionalInformation    :: a
   }
 
 instance Show a => Show (Trace a) where
@@ -40,10 +40,13 @@ createTargetWithoutGradient :: (Vector a -> Double) -> Target a
 createTargetWithoutGradient f = Target f Nothing
 
 -- | Trace constructor.
-initializeTrace :: Target a -> Vector a -> Double -> Trace a
+initializeTrace :: Target a -> Vector a -> a -> Trace a
 initializeTrace t as = Trace as (t^.objective $ as)
 
 -- | Sample from some distribution indirectly via MCMC.
+--
+--   NOTE this *creates* an Observable so it should probably be called
+--        something else.
 observeIndirectly
   :: PrimMonad m
   => Target a

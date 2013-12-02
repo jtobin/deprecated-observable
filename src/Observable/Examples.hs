@@ -12,8 +12,6 @@ import Observable.MCMC.Slice
 import Pipes
 import System.Random.MWC
 
-import Debug.Trace
-
 -- | Result of a coin toss.
 data Toss = Head | Tail deriving Show
 
@@ -31,7 +29,9 @@ tossTenBiased = replicateM 10 (toss 0.2)
 randomDraw :: IO [Toss]
 randomDraw = withSystemRandom . asGenIO $ sample tossTenBiased
 
--- | Beta-binomial in the IO monad.
+-- | Beta-binomial in the IO monad.  Note that do-notation forms a natural
+--   Gibbs sampling syntax.  It should also be possible to automatically turn
+--   this into a chromatic sampler via some low-level hacking.
 betaBinomial :: Int -> Double -> Double -> Observable IO Int
 betaBinomial n a b = do
   p <- beta a b
@@ -53,11 +53,6 @@ glRosenbrock xs =
 logRosenbrock :: Target Double
 logRosenbrock = createTargetWithGradient lRosenbrock glRosenbrock
 
-compositeMetropolis :: Transition Double
-compositeMetropolis = metropolisHastings 1.0 
-         `interleave` metropolisHastings 0.5 
-         `interleave` metropolisHastings 0.1 
-
 compositeTransition :: Transition Double
 compositeTransition = metropolisHastings 0.5
          `interleave` nuts 0.1
@@ -67,6 +62,7 @@ noisyTransition :: Transition Double
 noisyTransition =      metropolisHastings 0.5
   `randomlyInterleave` nuts 0.1
   `randomlyInterleave` slice 0.4
+  `interleave`         metropolisHastings 0.1
 
 logRosenbrockVariate :: PrimMonad m => Observable m (Trace Double)
 logRosenbrockVariate =
@@ -75,6 +71,6 @@ logRosenbrockVariate =
 
 main :: IO ()
 main = do
-  zs <- observeConcurrently 1000 logRosenbrockVariate
+  zs <- sampleConcurrently 1000 logRosenbrockVariate
   mapM_ print zs
 
