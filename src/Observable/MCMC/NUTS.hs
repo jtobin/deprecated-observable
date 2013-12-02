@@ -16,7 +16,7 @@ type Density    = Parameters -> Double
 type Gradient   = Parameters -> Parameters
 type Particle   = (Parameters, Parameters)
 
--- | A single iteration of NUTS.
+-- | The NUTS transition kernel.
 nuts :: Double -> Transition Double
 nuts e target = do
     t    <- use parameterSpacePosition

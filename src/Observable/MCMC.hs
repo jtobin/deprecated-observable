@@ -55,6 +55,15 @@ observedIndirectlyBy = observeIndirectly
 interleave :: Monad m => (t -> m a) -> (t -> m b) -> t -> m b
 interleave t0 t1 target = t0 target >> t1 target
 
+-- | Transition operator sampling.
+randomlyInterleave
+  :: Transition a
+  -> Transition a
+  -> Transition a
+randomlyInterleave t0 t1 target = do
+  s <- lift $ categorical [t0, t1]
+  s target
+
 -- | Simple gradient error handling.
 handleGradient :: Maybe t -> t
 handleGradient Nothing  = error "handleGradient: no gradient provided"

@@ -30,6 +30,9 @@ slice e t = do
   use parameterSpacePosition
     
 -- | Find a bracket around a density at a point.
+--
+--   NOTE obviously want to improve the efficiency of this guy.  The linear
+--        search is pretty hacky.
 findBracket :: (Num b, Ord a, PrimMonad m) 
   => (Vector b -> a)
   -> Int
@@ -72,7 +75,7 @@ expandLeft  = expandBy (-)
 -- | Rejection sample along a bracket.
 rejection :: (Ord b, PrimMonad m, Variate a) =>
   (Vector a -> b) -> Int -> (a, a) -> b -> Vector a -> Observable m (Vector a)
-rejection f j bracket height xs = go xs where
+rejection f j bracket height = go where
   go zs = do
     u    <- uniform bracket
     v    <- lift $ V.thaw zs

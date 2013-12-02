@@ -63,17 +63,18 @@ compositeTransition = metropolisHastings 0.5
          `interleave` nuts 0.1
          `interleave` slice 0.4
 
+noisyTransition :: Transition Double
+noisyTransition =      metropolisHastings 0.5
+  `randomlyInterleave` nuts 0.1
+  `randomlyInterleave` slice 0.4
+
 logRosenbrockVariate :: PrimMonad m => Observable m (Trace Double)
 logRosenbrockVariate =
-    observeIndirectly logRosenbrock compositeTransition q0 100
+    observeIndirectly logRosenbrock noisyTransition q0 100
   where q0 = initializeTrace logRosenbrock (V.fromList [0.0, 0.0]) 0.5
 
 main :: IO ()
 main = do
   zs <- observeConcurrently 1000 logRosenbrockVariate
   mapM_ print zs
-
-  --   withSystemRandom . asGenIO $ \g -> 
-  -- sampleIO (logRosenbrockVariate q0 100) g >>= print
-  -- runEffect $ observe (logRosenbrockVariate q0 100) g >-> display
 
