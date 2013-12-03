@@ -25,7 +25,6 @@ library
                        mtl >=2.1 && <2.2,
                        pipes >=4.0 && <4.1,
                        mwc-random >=0.12 && <0.13,
-                       lens >=3.10 && <3.11,
                        vector >=0.10 && <0.11,
                        statistics >=0.10 && <0.11
 

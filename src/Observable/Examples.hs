@@ -50,11 +50,6 @@ glRosenbrock xs =
 logRosenbrock :: Target Double
 logRosenbrock = createTargetWithGradient lRosenbrock glRosenbrock
 
-compositeTransition :: Transition Double
-compositeTransition = metropolisHastings 0.5
-         `interleave` nuts 0.1
-         `interleave` slice 0.4
-
 noisyTransition :: Transition Double
 noisyTransition =      metropolisHastings 0.5
   `randomlyInterleave` nuts 0.1
@@ -63,8 +58,9 @@ noisyTransition =      metropolisHastings 0.5
 
 logRosenbrockVariate :: PrimMonad m => Observable m (MarkovChain Double)
 logRosenbrockVariate =
-    observeIndirectly logRosenbrock noisyTransition q0 100
-  where q0 = initializeMarkovChain logRosenbrock (V.fromList [0.0, 0.0]) 0.5
+    observeIndirectly 100 logRosenbrock noisyTransition origin
+  where
+    origin = initializeMarkovChain logRosenbrock (V.fromList [0.0, 0.0]) 0.5
 
 main :: IO ()
 main = do

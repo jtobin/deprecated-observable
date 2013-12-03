@@ -167,20 +167,20 @@ initializeMarkovChain t as = MarkovChain as (logObjective t $ as)
 --        something else.
 observeIndirectly
   :: PrimMonad m
-  => Target a
+  => Int
+  -> Target a
   -> Transition a
   -> MarkovChain a
-  -> Int
   -> Observable m (MarkovChain a)
-observeIndirectly f t o n = replicateM_ n (t f) `execStateT` o
+observeIndirectly n f t o = replicateM_ n (t f) `execStateT` o
 
 -- | Better infix syntax for observeIndirectly.
 observedIndirectlyBy
   :: PrimMonad m
-  => Target a
+  => Int
+  -> Target a
   -> Transition a
   -> MarkovChain a
-  -> Int
   -> Observable m (MarkovChain a)
 observedIndirectlyBy = observeIndirectly
 
