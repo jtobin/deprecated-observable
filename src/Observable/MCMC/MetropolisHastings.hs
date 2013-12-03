@@ -2,19 +2,18 @@
 
 module Observable.MCMC.MetropolisHastings (metropolisHastings) where
 
-import Control.Lens
 import Control.Monad.Primitive
 import Control.Monad.State.Strict
-import Data.Vector (Vector)
-import qualified Data.Vector as V
+import Data.Vector.Unboxed (Vector)
+import qualified Data.Vector.Unboxed as V
 import Observable.Core
-import Observable.MCMC
 import Statistics.Distribution
 import Statistics.Distribution.Normal
 
+-- | Can this be written to more sanely handle unboxed vectors?
 isoGauss :: Vector Double -> Vector Double -> Double -> Double
-isoGauss xs mu s = V.product $ V.zipWith density nds xs
-  where nds = V.map (`normalDistr` s) mu
+isoGauss xs mu s = V.product . V.fromList $ zipWith density nds (V.toList xs)
+  where nds = map (`normalDistr` s) (V.toList mu)
 
 perturb :: PrimMonad m
         => Vector Double -> Double -> Observable m (Vector Double)
@@ -23,8 +22,8 @@ perturb q e = V.mapM (`normal` e) q
 acceptRejectRatio
   :: Target Double -> Double -> Vector Double -> Vector Double -> Double
 acceptRejectRatio target e current proposed = exp . min 0 $
-    (target^.objective) proposed + log (isoGauss current proposed e)
-  - (target^.objective) current  - log (isoGauss proposed current e)
+    logObjective target proposed + log (isoGauss current proposed e)
+  - logObjective target current  - log (isoGauss proposed current e)
 
 nextState
   :: Double
@@ -43,10 +42,10 @@ nextState z target e current proposed
 
 metropolisHastings :: Double -> Transition Double
 metropolisHastings e t = do
-  current  <- use parameterSpacePosition
-  zc       <- lift $ unit
+  MarkovChain current _ _ <- get
+  zc       <- lift unit
   proposed <- lift $ perturb current e
   let next  = nextState zc t e current proposed
-  put $ Trace next (t^.objective $ next) e
+  put $ MarkovChain next (logObjective t next) e
   return next
 

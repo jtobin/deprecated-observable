@@ -4,36 +4,35 @@
 
 module Observable.MCMC.Slice where
 
-import Control.Lens
 import Control.Monad
 import Control.Monad.Primitive
 import Control.Monad.State.Strict
-import Data.Vector (Vector)
-import qualified Data.Vector as V
-import qualified Data.Vector.Mutable as V hiding (length)
+import Data.Vector.Unboxed (Vector, Unbox)
+import qualified Data.Vector.Unboxed as V
+import qualified Data.Vector.Unboxed.Mutable as V hiding (length)
 import Observable.Core
-import Observable.MCMC
 import System.Random.MWC hiding (uniform)
 
 -- | A multivariate slice sampler.
 slice :: Double -> Transition Double
 slice e t = do
-  currentPosition <- use parameterSpacePosition
+  MarkovChain currentPosition _ _ <- get
   let n = V.length currentPosition
   forM_ [0..n - 1] $ \j -> do
-    q       <- use parameterSpacePosition
-    height  <- liftM log   $ lift $ uniform (0, exp $ t^.objective $ q)
-    bracket <- lift . lift $ findBracket (t^.objective) j e height q
-    next    <- lift        $ rejection   (t^.objective) j bracket height q
-    put $ Trace next (t^.objective $ next) e
+    MarkovChain q _ _ <- get
+    height  <- liftM log   $ lift $ uniform (0, exp $ logObjective t q)
+    bracket <- lift . lift $ findBracket (logObjective t) j e height q
+    next    <- lift        $ rejection   (logObjective t) j bracket height q
+    put $ MarkovChain next (logObjective t next) e
 
-  use parameterSpacePosition
+  MarkovChain q _ _ <- get
+  return q
     
 -- | Find a bracket around a density at a point.
 --
 --   NOTE obviously want to improve the efficiency of this guy.  The linear
 --        search is pretty hacky.
-findBracket :: (Num b, Ord a, PrimMonad m) 
+findBracket :: (Num b, Ord a, PrimMonad m, Unbox b)
   => (Vector b -> a)
   -> Int
   -> b
@@ -57,7 +56,8 @@ findBracket f j e height xs = go xs xs where
 
 -- | Expand a bracket by some means.
 expandBy
-  :: PrimMonad m => (a -> a -> a) -> Int -> a -> Vector a -> m (Vector a)
+  :: (PrimMonad m, Unbox a)
+  => (a -> a -> a) -> Int -> a -> Vector a -> m (Vector a)
 expandBy f j e xs = do
   v  <- V.thaw xs
   xj <- V.unsafeRead v j
@@ -65,16 +65,26 @@ expandBy f j e xs = do
   V.freeze v
 
 -- | Expand a bracket to the right.
-expandRight :: (Num a, PrimMonad m) => Int -> a -> Vector a -> m (Vector a)
+expandRight
+  :: (Num a, Unbox a, PrimMonad m)
+  => Int -> a -> Vector a -> m (Vector a)
 expandRight = expandBy (+)
 
 -- | Expand a bracket to the left.
-expandLeft :: (Num a, PrimMonad m) => Int -> a -> Vector a -> m (Vector a)
+expandLeft
+  :: (Unbox a, Num a, PrimMonad m)
+  => Int -> a -> Vector a -> m (Vector a)
 expandLeft  = expandBy (-)
 
 -- | Rejection sample along a bracket.
-rejection :: (Ord b, PrimMonad m, Variate a) =>
-  (Vector a -> b) -> Int -> (a, a) -> b -> Vector a -> Observable m (Vector a)
+rejection
+  :: (Ord b, Unbox a, PrimMonad m, Variate a)
+  => (Vector a -> b)
+  -> Int
+  -> (a, a)
+  -> b
+  -> Vector a
+  -> Observable m (Vector a)
 rejection f j bracket height = go where
   go zs = do
     u    <- uniform bracket

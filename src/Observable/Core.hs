@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Observable.Core where
 
@@ -6,13 +8,16 @@ import Control.Applicative
 import Control.Concurrent.Async
 import Control.Monad
 import Control.Monad.Primitive
-import Control.Monad.Trans
+import Control.Monad.State.Strict
+import Data.Vector.Unboxed (Vector, Unbox)
 import Pipes
 import System.Random.MWC hiding (uniform)
 import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWC.Dist
 
-data Observable m a = Observable { sample :: Gen (PrimState m) -> m a }
+-- | The Observable monad transformer provides an environment for managing
+--   uncertainty. 
+newtype Observable m a = Observable { sample :: Gen (PrimState m) -> m a }
 
 instance PrimMonad m => Functor (Observable m) where
   fmap h (Observable f) = Observable $ liftM h . f
@@ -29,6 +34,26 @@ instance PrimMonad m => Monad (Observable m) where
 
 instance MonadTrans Observable where
   lift m = Observable $ const m
+
+-- | A Target is something that can be sampled from by MCMC.
+data Target a = Target {
+    logObjective :: Vector a -> Double
+  , gradient     :: Maybe (Vector a -> Vector a)
+  }
+
+-- | The current state of a Markov chain.
+data MarkovChain a = MarkovChain {
+    parameterSpacePosition :: Vector a
+  , dataSpacePosition      :: Double
+  , optionalInformation    :: a
+  }
+
+instance (Show a, Unbox a) => Show (MarkovChain a) where
+  show = show . parameterSpacePosition
+
+-- | A transition operator for driving a Markov chain.
+type Transition a = forall m. PrimMonad m =>
+  Target a -> StateT (MarkovChain a) (Observable m) (Vector a)
 
 -- | Stream observations from a distribution.
 observe
@@ -122,4 +147,55 @@ display = forever $ await >>= lift . print
 -- | Collect n results.
 collect :: Monad m => Int -> Consumer a m [a]
 collect n = replicateM n await
+
+-- | Target constructor using a gradient.
+createTargetWithGradient
+  :: (Vector a -> Double) -> (Vector a -> Vector a) -> Target a
+createTargetWithGradient f g  = Target f (Just g)
+
+-- | Target constructor sans gradient.
+createTargetWithoutGradient :: (Vector a -> Double) -> Target a
+createTargetWithoutGradient f = Target f Nothing
+
+-- | MarkovChain constructor.
+initializeMarkovChain :: Target a -> Vector a -> a -> MarkovChain a
+initializeMarkovChain t as = MarkovChain as (logObjective t $ as)
+
+-- | Sample from some distribution indirectly via MCMC.
+--
+--   NOTE this *creates* an Observable so it should probably be called
+--        something else.
+observeIndirectly
+  :: PrimMonad m
+  => Target a
+  -> Transition a
+  -> MarkovChain a
+  -> Int
+  -> Observable m (MarkovChain a)
+observeIndirectly f t o n = replicateM_ n (t f) `execStateT` o
+
+-- | Better infix syntax for observeIndirectly.
+observedIndirectlyBy
+  :: PrimMonad m
+  => Target a
+  -> Transition a
+  -> MarkovChain a
+  -> Int
+  -> Observable m (MarkovChain a)
+observedIndirectlyBy = observeIndirectly
+
+-- | Transition operator composition.
+interleave :: Transition a -> Transition a -> Transition a
+interleave t0 t1 target = t0 target >> t1 target
+
+-- | Transition operator sampling.
+randomlyInterleave :: Transition a -> Transition a -> Transition a
+randomlyInterleave t0 t1 target = do
+  s <- lift $ categorical [t0, t1]
+  s target
+
+-- | Simple gradient error handling.
+handleGradient :: Maybe t -> t
+handleGradient Nothing  = error "handleGradient: no gradient provided"
+handleGradient (Just g) = g
 

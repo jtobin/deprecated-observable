@@ -2,13 +2,10 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Primitive
 import Control.Lens
-import Data.Vector (Vector)
-import qualified Data.Vector as V
+import Data.Vector.Unboxed (Vector, Unbox)
+import qualified Data.Vector.Unboxed as V
 import Observable.Core
 import Observable.MCMC
-import Observable.MCMC.MetropolisHastings
-import Observable.MCMC.NUTS
-import Observable.MCMC.Slice
 import Pipes
 import System.Random.MWC
 
@@ -38,12 +35,12 @@ betaBinomial n a b = do
   binomial n p
 
 -- | log-Rosenbrock function.
-lRosenbrock :: RealFloat a => Vector a -> a
+lRosenbrock :: (RealFloat a, Unbox a) => Vector a -> a
 lRosenbrock xs = let [x0, x1] = V.toList xs
                  in  (-1) * (5 * (x1 - x0 ^ 2) ^ 2 + 0.05 * (1 - x0) ^ 2)
 
 -- | Gradient of log-Rosenbrock.
-glRosenbrock :: RealFloat a => Vector a -> Vector a
+glRosenbrock :: (RealFloat a, Unbox a) => Vector a -> Vector a
 glRosenbrock xs =
   let [x, y] = V.toList xs
       dx = 20 * x * (y - x ^ 2) + 0.1 * (1 - x)
@@ -64,10 +61,10 @@ noisyTransition =      metropolisHastings 0.5
   `randomlyInterleave` slice 0.4
   `interleave`         metropolisHastings 0.1
 
-logRosenbrockVariate :: PrimMonad m => Observable m (Trace Double)
+logRosenbrockVariate :: PrimMonad m => Observable m (MarkovChain Double)
 logRosenbrockVariate =
     observeIndirectly logRosenbrock noisyTransition q0 100
-  where q0 = initializeTrace logRosenbrock (V.fromList [0.0, 0.0]) 0.5
+  where q0 = initializeMarkovChain logRosenbrock (V.fromList [0.0, 0.0]) 0.5
 
 main :: IO ()
 main = do

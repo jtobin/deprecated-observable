@@ -1,15 +1,13 @@
 {-# LANGUAGE RankNTypes #-}
 
-module Observable.MCMC.NUTS where
+module Observable.MCMC.NUTS (nuts) where
 
-import Control.Lens
 import Control.Monad
 import Control.Monad.Trans
 import Control.Monad.State.Strict
-import Data.Vector (Vector)
-import qualified Data.Vector as V
+import Data.Vector.Unboxed (Vector, Unbox)
+import qualified Data.Vector.Unboxed as V
 import Observable.Core
-import Observable.MCMC
 
 type Parameters = Vector Double
 type Density    = Parameters -> Double
@@ -19,15 +17,15 @@ type Particle   = (Parameters, Parameters)
 -- | The NUTS transition kernel.
 nuts :: Double -> Transition Double
 nuts e target = do
-    t    <- use parameterSpacePosition
-    r0   <- V.replicateM (V.length t) (lift $ normal 0 1)
-    z0   <- lift $ exponential 1
+    MarkovChain t _ _ <- get
+    r0          <- V.replicateM (V.length t) (lift $ normal 0 1)
+    z0          <- lift $ exponential 1
     let logu = log (auxilliaryTarget lTarget t r0) - z0
 
     let go (tn, tp, rn, rp, tm, j, n, s)
           | s == 1 = do
               vj <- lift $ categorical [-1, 1]
-              z  <- lift $ unit
+              z  <- lift unit
 
               (tnn, rnn, tpp, rpp, t1, n1, s1) <- 
                 if   vj == -1
@@ -50,12 +48,14 @@ nuts e target = do
 
               go (tnn, tpp, rnn, rpp, t2, j1, n2, s2)
 
-          | otherwise = put (Trace tm (lTarget tm) e) >> return tm
+          | otherwise = do
+              put $ MarkovChain tm (lTarget tm) e
+              return tm
 
     go (t, t, r0, r0, t, 0, 1, 1)
   where
-    lTarget  = target^.objective
-    glTarget = handleGradient $ target^.gradient
+    lTarget  = logObjective target
+    glTarget = handleGradient $ gradient target
 
 -- | Build the 'tree' of candidate states.
 buildTree lTarget glTarget t r logu v 0 e = do
@@ -66,7 +66,7 @@ buildTree lTarget glTarget t r logu v 0 e = do
   return (t0, r0, t0, r0, t0, n, s)
 
 buildTree lTarget glTarget t r logu v j e = do
-  z <- lift $ unit
+  z <- lift unit
   (tn, rn, tp, rp, t0, n0, s0) <- 
     buildTree lTarget glTarget t r logu v (pred j) e
 
@@ -93,7 +93,7 @@ buildTree lTarget glTarget t r logu v j e = do
   else return (tn, rn, tp, rp, t0, n0, s0)
 
 -- | Determine whether or not to stop doubling the tree of candidate states.
-stopCriterion :: (Integral a, Num b, Ord b)
+stopCriterion :: (Integral a, Num b, Ord b, Unbox b)
   => Vector b -> Vector b -> Vector b -> Vector b -> a
 stopCriterion tn tp rn rp = 
       indicate (positionDifference `innerProduct` rn >= 0)
@@ -110,38 +110,38 @@ leapfrog glTarget (t, r) e = (tf, rf)
     rf = adjustMomentum glTarget e tf rm
 
 -- | Adjust momentum.
-adjustMomentum :: Fractional c
+adjustMomentum :: (Fractional c, Unbox c)
   => (t -> Vector c) -> c -> t -> Vector c -> Vector c
 adjustMomentum glTarget e t r = r .+ ((e / 2) .* glTarget t)
 
 -- | Adjust position.
-adjustPosition :: Num c => c -> Vector c -> Vector c -> Vector c
+adjustPosition :: (Num c, Unbox c) => c -> Vector c -> Vector c -> Vector c
 adjustPosition e r t = t .+ (e .* r)
 
 -- | The MH acceptance ratio for a given proposal.
-acceptanceRatio :: Floating a
+acceptanceRatio :: (Floating a, Unbox a)
   => (t -> a) -> t -> t -> Vector a -> Vector a -> a
 acceptanceRatio lTarget t0 t1 r0 r1 = auxilliaryTarget lTarget t1 r1
                                     / auxilliaryTarget lTarget t0 r0
 
 -- | The negative potential. 
-auxilliaryTarget :: Floating a => (t -> a) -> t -> Vector a -> a
+auxilliaryTarget :: (Floating a, Unbox a) => (t -> a) -> t -> Vector a -> a
 auxilliaryTarget lTarget t r = exp (lTarget t - 0.5 * innerProduct r r)
 
 -- | Simple inner product.
-innerProduct :: Num a => Vector a -> Vector a -> a
+innerProduct :: (Num a, Unbox a) => Vector a -> Vector a -> a
 innerProduct xs ys = V.sum $ V.zipWith (*) xs ys
 
 -- | Vectorized multiplication.
-(.*) :: Num a => a -> Vector a -> Vector a
+(.*) :: (Num a, Unbox a) => a -> Vector a -> Vector a
 z .* xs = V.map (* z) xs
 
 -- | Vectorized subtraction.
-(.-) :: Num a => Vector a -> Vector a -> Vector a
+(.-) :: (Num a, Unbox a) => Vector a -> Vector a -> Vector a
 xs .- ys = V.zipWith (-) xs ys
 
 -- | Vectorized addition.
-(.+) :: Num a => Vector a -> Vector a -> Vector a
+(.+) :: (Num a, Unbox a) => Vector a -> Vector a -> Vector a
 xs .+ ys = V.zipWith (+) xs ys
 
 -- | Indicator function.
