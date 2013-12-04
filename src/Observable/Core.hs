@@ -10,6 +10,7 @@ import Control.Monad
 import Control.Monad.Primitive
 import Control.Monad.State.Strict
 import Data.Vector.Unboxed (Vector, Unbox)
+import qualified Data.Vector.Unboxed as V
 import Pipes
 import System.Random.MWC hiding (uniform)
 import qualified System.Random.MWC as MWC
@@ -64,8 +65,8 @@ observe
 observe (Observable f) g = forever $ lift (f g) >>= yield
 
 -- | Sample from a distribution in the IO monad.
-sampleIO :: Observable IO r -> Gen RealWorld -> IO r
-sampleIO = sample
+sampleIO :: Observable IO r -> IO r
+sampleIO = withSystemRandom . asGenIO . sample
 
 -- | Sample from a distribution concurrently in the IO monad.
 sampleConcurrently :: Int -> Observable IO b -> IO [b]
@@ -132,6 +133,12 @@ beta a b = do
   w <- gamma b 1
   return $ u / (u + w)
 
+-- | Dirichlet variate.
+dirichlet :: PrimMonad m => [Double] -> Observable m [Double]
+dirichlet as = do
+  zs <- mapM (`gamma` 1) as
+  return $ map (/ sum zs) zs
+
 -- | Bernoulli draw.
 bernoulli :: PrimMonad m => Double -> Observable m Bool
 bernoulli p = (< p) <$> unit
@@ -157,38 +164,37 @@ createTargetWithGradient f g  = Target f (Just g)
 createTargetWithoutGradient :: (Vector a -> Double) -> Target a
 createTargetWithoutGradient f = Target f Nothing
 
--- | MarkovChain constructor.
-initializeMarkovChain :: Target a -> Vector a -> a -> MarkovChain a
-initializeMarkovChain t as = MarkovChain as (logObjective t $ as)
+-- | Markov chain constructor.
+initializeChain :: Unbox a => Target a -> [a] -> a -> MarkovChain a
+initializeChain t as = MarkovChain vs (logObjective t vs)
+  where vs = V.fromList as
 
--- | Sample from some distribution indirectly via MCMC.
---
---   NOTE this *creates* an Observable so it should probably be called
---        something else.
-observeIndirectly
+-- | Create an Observable by using MCMC.
+withMcmc
   :: PrimMonad m
-  => Int
-  -> Target a
-  -> Transition a
+  => Transition a
   -> MarkovChain a
+  -> Int
+  -> Target a
   -> Observable m (MarkovChain a)
-observeIndirectly n f t o = replicateM_ n (t f) `execStateT` o
+withMcmc t o n f = replicateM_ n (t f) `execStateT` o
 
--- | Better infix syntax for observeIndirectly.
-observedIndirectlyBy
+-- | Return the trace of a Markov chain.
+traceChain
   :: PrimMonad m
-  => Int
-  -> Target a
-  -> Transition a
+  => Transition a
   -> MarkovChain a
-  -> Observable m (MarkovChain a)
-observedIndirectlyBy = observeIndirectly
+  -> Int
+  -> Target a
+  -> Gen (PrimState m)
+  -> m [Vector a]
+traceChain t o n f = sample $ replicateM n (t f) `evalStateT` o
 
 -- | Transition operator composition.
 interleave :: Transition a -> Transition a -> Transition a
 interleave t0 t1 target = t0 target >> t1 target
 
--- | Transition operator sampling.
+-- | Random transition operator composition.
 randomlyInterleave :: Transition a -> Transition a -> Transition a
 randomlyInterleave t0 t1 target = do
   s <- lift $ categorical [t0, t1]

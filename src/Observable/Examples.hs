@@ -27,43 +27,49 @@ randomDraw :: IO [Toss]
 randomDraw = withSystemRandom . asGenIO $ sample tossTenBiased
 
 -- | Beta-binomial in the IO monad.  Note that do-notation forms a natural
---   Gibbs sampling syntax.  It should also be possible to automatically turn
---   this into a chromatic sampler via some low-level hacking.
+--   DAG-sampling syntax.
 betaBinomial :: Int -> Double -> Double -> Observable IO Int
 betaBinomial n a b = do
   p <- beta a b
   binomial n p
 
--- | log-Rosenbrock function.
-lRosenbrock :: (RealFloat a, Unbox a) => Vector a -> a
+-- | Log-Rosenbrock function.
+lRosenbrock :: Vector Double -> Double
 lRosenbrock xs = let [x0, x1] = V.toList xs
                  in  (-1) * (5 * (x1 - x0 ^ 2) ^ 2 + 0.05 * (1 - x0) ^ 2)
 
 -- | Gradient of log-Rosenbrock.
-glRosenbrock :: (RealFloat a, Unbox a) => Vector a -> Vector a
+glRosenbrock :: Vector Double -> Vector Double
 glRosenbrock xs =
   let [x, y] = V.toList xs
       dx = 20 * x * (y - x ^ 2) + 0.1 * (1 - x)
       dy = -10 * (y - x ^ 2)
   in  V.fromList [dx, dy]
 
-logRosenbrock :: Target Double
-logRosenbrock = createTargetWithGradient lRosenbrock glRosenbrock
+lRosenbrockTarget :: Target Double
+lRosenbrockTarget = createTargetWithGradient lRosenbrock glRosenbrock
 
-noisyTransition :: Transition Double
-noisyTransition =      metropolisHastings 0.5
+customTransition :: Transition Double
+customTransition =     metropolisHastings 0.5
   `randomlyInterleave` nuts 0.1
   `randomlyInterleave` slice 0.4
   `interleave`         metropolisHastings 0.1
 
-logRosenbrockVariate :: PrimMonad m => Observable m (MarkovChain Double)
-logRosenbrockVariate =
-    observeIndirectly 100 logRosenbrock noisyTransition origin
-  where
-    origin = initializeMarkovChain logRosenbrock (V.fromList [0.0, 0.0]) 0.5
+origin  = initializeChain lRosenbrockTarget [0.0, 0.0] 0.5
+
+logRosenbrock :: PrimMonad m => Observable m (MarkovChain Double)
+logRosenbrock = withMcmc customTransition origin 100 lRosenbrockTarget
 
 main :: IO ()
 main = do
-  zs <- sampleConcurrently 1000 logRosenbrockVariate
+  -- Can examine a single chain for diagnostic purposes or interest's sake
+  -- zs <- withSystemRandom . asGenIO $
+  --         traceChain customTransition origin 1000 lRosenbrockTarget
+
+  -- Or sample (approximately) independently from the equilibrium distribution 
+  -- in parallel, provided the requisite iterations are sufficient for burn-in.
+
+  zs <- sampleConcurrently 1000 logRosenbrock
+
   mapM_ print zs
 
