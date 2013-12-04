@@ -1,4 +1,4 @@
 observable
 ==========
 
-An embedded DSL for probabilistic programming, based on sampling functions.
+An embedded DSL for working with sampling functions.
