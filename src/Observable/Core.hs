@@ -1,4 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -fno-warn-type-defaults #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RankNTypes #-}
 
@@ -19,6 +21,16 @@ import qualified System.Random.MWC.Distributions as MWC.Dist
 -- | The Observable monad transformer provides an environment for managing
 --   uncertainty. 
 newtype Observable m a = Observable { sample :: Gen (PrimState m) -> m a }
+
+-- | Distributions form at least a semiring, and possibly a ring (not 100%
+--   sure on the latter). 
+instance (PrimMonad m, Num a) => Num (Observable m a) where
+  (+) = liftM2 (+)
+  (-) = liftM2 (-)
+  (*) = liftM2 (*)
+  abs = liftM abs
+  signum      = error "signum: not supported for Observables"
+  fromInteger = error "fromInteger: not supported for Observables"
 
 instance PrimMonad m => Functor (Observable m) where
   fmap h (Observable f) = Observable $ liftM h . f
@@ -104,6 +116,10 @@ expectationIO
   -> Observable IO c
   -> IO a
 expectationIO n f p = sampleIO $ expectationGeneric n f p
+
+-- | Expectation with a default number of samples.
+expectationDefault :: (a -> Double) -> Observable IO a -> IO Double
+expectationDefault = expectationIO 1000
 
 -- | Joint (independent) distribution.
 joint :: Monad m => m a -> m b -> m (a, b)
