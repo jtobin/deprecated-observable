@@ -60,6 +60,23 @@ origin  = initializeChain lRosenbrockTarget [0.0, 0.0] 0.5
 logRosenbrock :: PrimMonad m => Observable m (MarkovChain Double)
 logRosenbrock = withMcmc customTransition origin 100 lRosenbrockTarget
 
+-- | Abstract distributions with countable support.
+countableSupport
+  :: (Enum a, Num a, Num b, Ord b, Variate b, PrimMonad m)
+  => (a -> (b, Observable m c))
+  -> Observable m c
+countableSupport f = unit >>= scan 1 where
+  scan n r
+    | r - fst (f n) <= 0 = snd (f n)
+    | otherwise          = scan (succ n) (r - fst (f n))
+
+-- | Example discrete distribution expressed in above fashion.
+-- ex: sampleIO $ countableSupport exampleDiscrete
+exampleDiscrete j = dist !! (j - 1)
+  where dist = [(0.01, return 1), (0.9, return 2), (0.09, return 3)]
+
+
+
 main :: IO ()
 main = do
   -- Can examine a single chain for diagnostic purposes or interest's sake

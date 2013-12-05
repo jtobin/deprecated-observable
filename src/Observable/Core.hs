@@ -73,6 +73,38 @@ sampleConcurrently :: Int -> Observable IO b -> IO [b]
 sampleConcurrently n (Observable f) = mapConcurrently h (replicate n ())
   where h _x = withSystemRandom . asGenIO $ \g -> f g
 
+-- | Generic expectation operator.
+expectationGeneric
+  :: (Fractional a, Integral b, PrimMonad m)
+  => b
+  -> (c -> a)
+  -> Observable m c
+  -> Observable m a
+expectationGeneric n f p = go n 0 where
+  go !0 !s = return s
+  go !j !s = do
+    x <- liftM f p
+    go (pred j) (s + x / fromIntegral n)
+
+-- | Expectation query, with provided PRNG.
+expectation
+  :: (Fractional a, Integral b, PrimMonad m)
+  => b
+  -> (c -> a)
+  -> Observable m c
+  -> Gen (PrimState m)
+  -> m a
+expectation n f p = sample $ expectationGeneric n f p
+
+-- | Expectation query in IO.
+expectationIO
+  :: (Fractional a, Integral b)
+  => b
+  -> (c -> a)
+  -> Observable IO c
+  -> IO a
+expectationIO n f p = sampleIO $ expectationGeneric n f p
+
 -- | Joint (independent) distribution.
 joint :: Monad m => m a -> m b -> m (a, b)
 joint = liftM2 (,)

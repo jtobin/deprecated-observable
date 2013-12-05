@@ -1,7 +1,7 @@
 name:                observable
 version:             0.1.0.0
-synopsis:            An embedded DSL for probabilistic programming.
-description:         An embedded DSL for probabilistic programming by way of sampling functions.
+synopsis:            An embedded DSL for working with sampling functions.
+description:         An embedded DSL for working with sampling functions.
 homepage:            http://github.com/jtobin/observable
 license:             BSD3
 license-file:        LICENSE
@@ -19,14 +19,14 @@ library
                        RankNTypes,
                        BangPatterns
 
-  build-depends:       base >=4.6 && <4.7, 
-                       async >=2.0 && <2.1,
-                       primitive >=0.5 && <0.6,
-                       mtl >=2.1 && <2.2,
-                       pipes >=4.0 && <4.1,
-                       mwc-random >=0.12 && <0.13,
-                       vector >=0.10 && <0.11,
-                       statistics >=0.10 && <0.11
+  build-depends:       base       >= 4.6 && <4.7,
+                       async      >= 2.0 && <2.1,
+                       primitive  >= 0.5 && <0.6,
+                       mtl        >= 2.1 && <2.2,
+                       pipes      >= 4.0 && <4.1,
+                       mwc-random >= 0.12 && <0.13,
+                       vector     >= 0.10 && <0.11,
+                       statistics >= 0.10 && <0.11
 
   hs-source-dirs:      src
 

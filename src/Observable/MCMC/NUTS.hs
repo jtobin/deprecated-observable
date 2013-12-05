@@ -152,3 +152,4 @@ indicate False = 0
 -- | Alias for fromIntegral.
 fi :: (Integral a, Num b) => a -> b
 fi = fromIntegral
+
