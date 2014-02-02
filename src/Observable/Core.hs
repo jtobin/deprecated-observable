@@ -13,24 +13,14 @@ import Control.Monad.Primitive
 import Control.Monad.State.Strict
 import Data.Vector.Unboxed (Vector, Unbox)
 import qualified Data.Vector.Unboxed as V
-import Pipes
 import System.Random.MWC hiding (uniform)
 import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWC.Dist
 
 -- | The Observable monad transformer provides an environment for managing
---   uncertainty. 
+--   uncertainty.   It characterizes a probability distribution solely by way
+--   of sampling functions.
 newtype Observable m a = Observable { sample :: Gen (PrimState m) -> m a }
-
--- | Distributions form at least a semiring, and possibly a ring (not 100%
---   sure on the latter). 
-instance (PrimMonad m, Num a) => Num (Observable m a) where
-  (+) = liftM2 (+)
-  (-) = liftM2 (-)
-  (*) = liftM2 (*)
-  abs = liftM abs
-  signum      = error "signum: not supported for Observables"
-  fromInteger = error "fromInteger: not supported for Observables"
 
 instance PrimMonad m => Functor (Observable m) where
   fmap h (Observable f) = Observable $ liftM h . f
@@ -57,7 +47,7 @@ data Target a = Target {
 -- | The current state of a Markov chain.
 data MarkovChain a = MarkovChain {
     parameterSpacePosition :: Vector a
-  , dataSpacePosition      :: Double
+  , objectiveValue         :: Double
   , optionalInformation    :: a
   }
 
@@ -68,14 +58,6 @@ instance (Show a, Unbox a) => Show (MarkovChain a) where
 type Transition a = forall m. PrimMonad m =>
   Target a -> StateT (MarkovChain a) (Observable m) (Vector a)
 
--- | Stream observations from a distribution.
-observe
-  :: PrimMonad m
-  => Observable m a
-  -> Gen (PrimState m)
-  -> Producer a m b
-observe (Observable f) g = forever $ lift (f g) >>= yield
-
 -- | Sample from a distribution in the IO monad.
 sampleIO :: Observable IO r -> IO r
 sampleIO = withSystemRandom . asGenIO . sample
@@ -85,7 +67,7 @@ sampleConcurrently :: Int -> Observable IO b -> IO [b]
 sampleConcurrently n (Observable f) = mapConcurrently h (replicate n ())
   where h _x = withSystemRandom . asGenIO $ \g -> f g
 
--- | Generic expectation operator.
+-- | Generic expectation query.
 expectationGeneric
   :: (Fractional a, Integral b, PrimMonad m)
   => b
@@ -194,14 +176,6 @@ bernoulli p = (< p) <$> unit
 -- | Binomial draw.
 binomial :: PrimMonad m => Int -> Double -> Observable m Int
 binomial n p = liftM (length . filter id) $ replicateM n (bernoulli p)
-
--- | Receive input from a stream and print it to stdout.
-display :: Show a => Consumer a IO ()
-display = forever $ await >>= lift . print
-
--- | Collect n results.
-collect :: Monad m => Int -> Consumer a m [a]
-collect n = replicateM n await
 
 -- | Target constructor using a gradient.
 createTargetWithGradient
