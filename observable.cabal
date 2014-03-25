@@ -19,14 +19,14 @@ library
                        RankNTypes,
                        BangPatterns
 
-  build-depends:       base       >= 4.6 && <4.7,
-                       async      >= 2.0 && <2.1,
-                       primitive  >= 0.5 && <0.6,
-                       mtl        >= 2.1 && <2.2,
-                       pipes      >= 4.0 && <4.1,
-                       mwc-random >= 0.12 && <0.13,
-                       vector     >= 0.10 && <0.11,
-                       statistics >= 0.10 && <0.11
+  build-depends:       base       >= 4.6,
+                       async      >= 2.0,
+                       primitive  >= 0.5,
+                       mtl        >= 2.1,
+                       pipes      >= 4.0,
+                       mwc-random >= 0.12,
+                       vector     >= 0.10,
+                       statistics >= 0.10
 
   hs-source-dirs:      src
 

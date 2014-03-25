@@ -2,6 +2,7 @@
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Observable.Core where
@@ -17,9 +18,6 @@ import System.Random.MWC hiding (uniform)
 import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWC.Dist
 
--- | The Observable monad transformer provides an environment for managing
---   uncertainty.   It characterizes a probability distribution solely by way
---   of sampling functions.
 newtype Observable m a = Observable { sample :: Gen (PrimState m) -> m a }
 
 instance PrimMonad m => Functor (Observable m) where
@@ -44,11 +42,27 @@ data Target a = Target {
   , gradient     :: Maybe (Vector a -> Vector a)
   }
 
+createTargetWithGradient
+  :: (Vector a -> Double) -> (Vector a -> Vector a) -> Target a
+createTargetWithGradient f g  = Target f (Just g)
+
+createTargetWithoutGradient :: (Vector a -> Double) -> Target a
+createTargetWithoutGradient f = Target f Nothing
+
 -- | The current state of a Markov chain.
 data MarkovChain a = MarkovChain {
     parameterSpacePosition :: Vector a
   , objectiveValue         :: Double
   , optionalInformation    :: a
+  }
+
+-- | Possibly better; encapsulates everything together well.
+data Chain a = Chain {
+    paramSpacePosition :: Vector a
+  , objFunction        :: Target a
+  , objValue           :: Double
+  , transitionOperator :: AltTransition a
+  , optInformation     :: a
   }
 
 instance (Show a, Unbox a) => Show (MarkovChain a) where
@@ -57,6 +71,9 @@ instance (Show a, Unbox a) => Show (MarkovChain a) where
 -- | A transition operator for driving a Markov chain.
 type Transition a = forall m. PrimMonad m =>
   Target a -> StateT (MarkovChain a) (Observable m) (Vector a)
+
+type AltTransition a = forall m. PrimMonad m =>
+  Chain a -> StateT (Chain a) (Observable m) (Vector a)
 
 -- | Sample from a distribution in the IO monad.
 sampleIO :: Observable IO r -> IO r
@@ -177,40 +194,36 @@ bernoulli p = (< p) <$> unit
 binomial :: PrimMonad m => Int -> Double -> Observable m Int
 binomial n p = liftM (length . filter id) $ replicateM n (bernoulli p)
 
--- | Target constructor using a gradient.
-createTargetWithGradient
-  :: (Vector a -> Double) -> (Vector a -> Vector a) -> Target a
-createTargetWithGradient f g  = Target f (Just g)
-
--- | Target constructor sans gradient.
-createTargetWithoutGradient :: (Vector a -> Double) -> Target a
-createTargetWithoutGradient f = Target f Nothing
-
 -- | Markov chain constructor.
 initializeChain :: Unbox a => Target a -> [a] -> a -> MarkovChain a
 initializeChain t as = MarkovChain vs (logObjective t vs)
   where vs = V.fromList as
 
--- | Create an Observable by using MCMC.
-withMcmc
+-- | Characterize a probability distribution by way of a Markov chain with the
+--   same ergodic distribution.
+ergodicSampler
   :: PrimMonad m
   => Transition a
   -> MarkovChain a
   -> Int
   -> Target a
   -> Observable m (MarkovChain a)
-withMcmc t o n f = replicateM_ n (t f) `execStateT` o
+ergodicSampler t o n f = replicateM_ n (t f) `execStateT` o
+
+erSampler :: PrimMonad m => Chain a -> Int -> Observable m (Chain a)
+erSampler m n = replicateM_ n (transitionOperator m m) `execStateT` m
+
 
 -- | Return the trace of a Markov chain.
 traceChain
   :: PrimMonad m
-  => Transition a
+  => Target a
+  -> Transition a
   -> MarkovChain a
   -> Int
-  -> Target a
   -> Gen (PrimState m)
   -> m [Vector a]
-traceChain t o n f = sample $ replicateM n (t f) `evalStateT` o
+traceChain f t o n = sample $ replicateM n (t f) `evalStateT` o
 
 -- | Transition operator composition.
 interleave :: Transition a -> Transition a -> Transition a
@@ -222,8 +235,36 @@ randomlyInterleave t0 t1 target = do
   s <- lift $ categorical [t0, t1]
   s target
 
+-- | Interleave one of the two choices according to a certain probability.
+firstWithProb :: Double -> Transition a -> Transition a -> Transition a
+firstWithProb p t0 t1 target = do
+  s <- lift $ bernoulli p
+  if   s
+  then t0 target
+  else t1 target
+
+-- | Interleave a list of transition operators.
+interleaveMany :: [t -> b] -> t -> b
+interleaveMany = foldl1 (>>) 
+
+
 -- | Simple gradient error handling.
 handleGradient :: Maybe t -> t
 handleGradient Nothing  = error "handleGradient: no gradient provided"
 handleGradient (Just g) = g
+
+-- | Abstract distributions with countable support.
+--countableSupport
+--  :: (Enum a, Num a, Num b, Ord b, Variate b, PrimMonad m)
+--  => (a -> (b, Observable m c))
+--  -> Observable m c
+--countableSupport f = unit >>= scan 1 where
+--  scan n r
+--    | r - fst (f n) <= 0 = snd (f n)
+--    | otherwise          = scan (succ n) (r - fst (f n))
+
+-- | Example discrete distribution expressed in above fashion.
+-- ex: sampleIO $ countableSupport exampleDiscrete
+--exampleDiscrete j = dist !! (j - 1)
+--  where dist = [(0.01, return 1), (0.9, return 2), (0.09, return 3)]
 

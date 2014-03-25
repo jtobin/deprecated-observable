@@ -23,7 +23,7 @@ perturb
   -> Observable m (Vector Double)
 perturb q e = V.mapM (`normal` e) q
 
--- | Calculae the acceptance ratio for a proposed move.
+-- | Calculate the acceptance ratio for a proposed move.
 acceptRejectRatio
   :: Target Double -> Double -> Vector Double -> Vector Double -> Double
 acceptRejectRatio target e current proposed = exp . min 0 $
