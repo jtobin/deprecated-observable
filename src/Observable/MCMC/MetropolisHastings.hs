@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 
-module Observable.MCMC.MetropolisHastings where -- (metropolisHastings) where
+module Observable.MCMC.MetropolisHastings (metropolisHastings) where
 
 import Control.Monad.Primitive
 import Control.Monad.State.Strict
@@ -13,29 +13,26 @@ import Observable.Types
 import Statistics.Distribution
 import Statistics.Distribution.Normal
 
--- | Isometric Gaussian with mean mu standard deviation s.
-isoGauss :: Vector Double -> Vector Double -> Double -> Double
-isoGauss xs mu s = product $ zipWith density normalDists xsAsList where
-  xsAsList    = V.toList xs
-  muAsList    = V.toList mu
-  normalDists = map (`normalDistr` s) muAsList
+sphericalGaussian :: Vector Double -> Vector Double -> Double -> Double
+sphericalGaussian xs mu sd = product $ zipWith density normalDists xsAsList
+  where
+    xsAsList    = V.toList xs
+    muAsList    = V.toList mu
+    normalDists = map (`normalDistr` sd) muAsList
 
--- | Perturb something by kicking it with a Gaussian variate.
 perturb
   :: PrimMonad m
   => Vector Double
   -> Double
   -> Observable m (Vector Double)
-perturb q stepSize = V.mapM (`normal` stepSize) q
+perturb q sd = V.mapM (`normal` sd) q
 
--- | Calculate the acceptance ratio for a proposed move.
 acceptRatio
   :: Target Double -> Vector Double -> Vector Double -> Double -> Double
-acceptRatio target current proposed stepSize = exp . min 0 $
-    logObjective target proposed + log (isoGauss current proposed stepSize)
-  - logObjective target current  - log (isoGauss proposed current stepSize)
+acceptRatio target current proposed sd = exp . min 0 $
+    logObjective target proposed + log (sphericalGaussian current proposed sd)
+  - logObjective target current  - log (sphericalGaussian proposed current sd)
 
--- | Determine the next state of the chain.
 nextState
   :: Target Double
   -> Vector Double
@@ -43,33 +40,30 @@ nextState
   -> Double
   -> Double
   -> Vector Double
-nextState target current proposed stepSize z
+nextState target current proposed sd z
     | z < acceptProb = proposed
     | otherwise      = current
   where
-    ratio = acceptRatio target current proposed stepSize 
+    ratio = acceptRatio target current proposed sd 
     acceptProb | isNaN ratio = 0
                | otherwise   = ratio
 
--- | Get the step size from the optional store.
-getStepSize :: Maybe Double -> OptionalStore -> Double
-getStepSize Nothing store = stepSize
-  where (ODouble stepSize) = HashMap.lookupDefault (ODouble 1.0) MH store
+getStandardDeviation :: Maybe Double -> OptionalStore -> Double
+getStandardDeviation (Just sd) _   = sd
+getStandardDeviation Nothing store = sd where
+  (ODouble sd) = HashMap.lookupDefault (ODouble 1.0) MH store
 
-getStepSize (Just stepSize) _ = stepSize
+updateStandardDeviation :: Double -> OptionalStore -> OptionalStore
+updateStandardDeviation sd = HashMap.insert MH (ODouble sd) 
 
-updateStepSize :: Double -> OptionalStore -> OptionalStore
-updateStepSize stepSize store = HashMap.insert MH (ODouble stepSize) store
-
--- | The Metropolis-Hastings transition operator.
 metropolisHastings :: PrimMonad m => Maybe Double -> Transition m Double
 metropolisHastings e = do
   Chain current target _ store <- get
-  let stepSize = getStepSize e store
+  let sd = getStandardDeviation e store
+  proposed <- lift $ perturb current sd
   zc       <- lift unit
-  proposed <- lift $ perturb current stepSize
-  let next     = nextState target current proposed stepSize zc
-      newStore = updateStepSize stepSize store
+  let next     = nextState target current proposed sd zc
+      newStore = updateStandardDeviation sd store
   put $ Chain next target (logObjective target next) newStore
   return next
 

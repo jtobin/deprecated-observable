@@ -11,21 +11,22 @@ import Data.Vector.Unboxed (Vector, Unbox)
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as V hiding (length)
 import Observable.Core
+import Observable.Types
 import System.Random.MWC hiding (uniform)
 
 -- | A multivariate slice sampler.
-slice :: Double -> Transition Double
-slice e t = do
-  MarkovChain currentPosition _ _ <- get
-  let n = V.length currentPosition
+slice :: PrimMonad m => Double -> Transition m Double
+slice e = do
+  Chain position target _ _ <- get
+  let n = V.length position
   forM_ [0..n - 1] $ \j -> do
-    MarkovChain q _ _ <- get
-    height  <- liftM log   $ lift $ uniform (0, exp $ logObjective t q)
-    bracket <- lift . lift $ findBracket (logObjective t) j e height q
-    next    <- lift        $ rejection   (logObjective t) j bracket height q
-    put $ MarkovChain next (logObjective t next) e
+    Chain q _ _ _ <- get
+    height  <- liftM log   $ lift $ uniform (0, exp $ logObjective target q)
+    bracket <- lift . lift $ findBracket (logObjective target) j e height q
+    next    <- lift $ rejection   (logObjective target) j bracket height q
+    put $ Chain next target (logObjective target next) undefined
 
-  MarkovChain q _ _ <- get
+  Chain q _ _ _ <- get
   return q
     
 -- | Find a bracket around a density at a point.

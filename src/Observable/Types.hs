@@ -1,7 +1,4 @@
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE ImpredicativeTypes #-}
-{-# LANGUAGE RankNTypes #-}
 
 module Observable.Types where
 
@@ -18,14 +15,14 @@ import System.Random.MWC
 
 newtype Observable m a = Observable { sample :: Gen (PrimState m) -> m a }
 
-instance PrimMonad m => Functor (Observable m) where
+instance Monad m => Functor (Observable m) where
   fmap h (Observable f) = Observable $ liftM h . f
 
-instance PrimMonad m => Applicative (Observable m) where
+instance Monad m => Applicative (Observable m) where
   pure  = return
   (<*>) = ap
 
-instance PrimMonad m => Monad (Observable m) where
+instance Monad m => Monad (Observable m) where
   return x = Observable $ const (return x)
   m >>= h  = Observable $ \g -> do
     z <- sample m g
@@ -46,7 +43,11 @@ createTargetWithGradient f g  = Target f (Just g)
 createTargetWithoutGradient :: (Vector a -> Double) -> Target a
 createTargetWithoutGradient f = Target f Nothing
 
-data Algorithm = MH deriving (Eq, Show, Generic)
+handleGradient :: Maybe t -> t
+handleGradient Nothing  = error "handleGradient: no gradient provided"
+handleGradient (Just g) = g
+
+data Algorithm = MH | HMC deriving (Eq, Show, Generic)
 
 instance Hashable Algorithm
 
@@ -55,6 +56,7 @@ type OptionalStore = HashMap Algorithm OptionalInfo
 data OptionalInfo = 
     ODouble Double
   | OInt Int
+  | OPair (OptionalInfo, OptionalInfo)
   deriving (Eq, Show)
 
 data Chain a = Chain {

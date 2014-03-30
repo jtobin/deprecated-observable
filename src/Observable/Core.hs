@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wall #-}
-{-# OPTIONS_GHC -fno-warn-type-defaults #-}
 {-# LANGUAGE BangPatterns #-}
 
 module Observable.Core where
@@ -16,7 +14,7 @@ sampleIO :: Observable IO r -> IO r
 sampleIO = withSystemRandom . asGenIO . sample
 
 expectation
-  :: PrimMonad m
+  :: Monad m
   => Int
   -> (a -> Double)
   -> Observable m a
@@ -58,13 +56,11 @@ categorical cs = do
 standardNormal :: PrimMonad m => Observable m Double
 standardNormal = Observable MWC.Dist.standard
 
--- s corresponds to standard deviation
 normal :: PrimMonad m => Double -> Double -> Observable m Double
-normal m s = Observable $ MWC.Dist.normal m s
+normal m sd = Observable $ MWC.Dist.normal m sd
 
--- s corresponds to standard deviation
 logNormal :: PrimMonad m => Double -> Double -> Observable m Double
-logNormal m s = exp <$> normal m s
+logNormal m sd = exp <$> normal m sd
 
 exponential :: PrimMonad m => Double -> Observable m Double
 exponential r = Observable $ MWC.Dist.exponential r
