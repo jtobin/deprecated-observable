@@ -7,3 +7,6 @@ Setup.hs
 src/Examples
 deprecated
 sandbox
+cabal.sandbox.config
+.cabal-sandbox
+traces.r

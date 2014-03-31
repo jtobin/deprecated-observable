@@ -1,26 +1,40 @@
-{-# LANGUAGE RankNTypes #-}
-
 module Observable.MCMC.NUTS (nuts) where
 
 import Control.Monad
+import Control.Monad.Primitive
 import Control.Monad.Trans
-import Control.Monad.State.Strict
+import Control.Monad.Trans.State.Strict
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HashMap
 import Data.Vector.Unboxed (Vector, Unbox)
 import qualified Data.Vector.Unboxed as V
 import Observable.Core
+import Observable.Types
+
+import Debug.Trace
 
 type Parameters = Vector Double
-type Density    = Parameters -> Double
 type Gradient   = Parameters -> Parameters
 type Particle   = (Parameters, Parameters)
 
+getStepSize :: Maybe Double -> OptionalStore -> Double
+getStepSize (Just e) _    = e
+getStepSize Nothing store = e where
+  (ODouble e) = HashMap.lookupDefault (ODouble 0.1) NUTS store
+
+updateStepSize :: Double -> OptionalStore -> OptionalStore
+updateStepSize e = HashMap.insert NUTS (ODouble e) 
+
 -- | The NUTS transition kernel.
-nuts :: Double -> Transition Double
-nuts e target = do
-    MarkovChain t _ _ <- get
+nuts :: PrimMonad m => Transition m Double
+nuts = do
+    Chain t target _ store <- get
     r0          <- V.replicateM (V.length t) (lift $ normal 0 1)
     z0          <- lift $ exponential 1
-    let logu = log (auxilliaryTarget lTarget t r0) - z0
+    let logu     = log (auxilliaryTarget lTarget t r0) - z0
+        lTarget  = logObjective target
+        glTarget = handleGradient $ gradient target
+        e        = getStepSize Nothing store
 
     let go (tn, tp, rn, rp, tm, j, n, s)
           | s == 1 = do
@@ -49,15 +63,11 @@ nuts e target = do
               go (tnn, tpp, rnn, rpp, t2, j1, n2, s2)
 
           | otherwise = do
-              put $ MarkovChain tm (lTarget tm) e
+              put $ Chain tm target (lTarget tm) (updateStepSize e store)
               return tm
 
     go (t, t, r0, r0, t, 0, 1, 1)
-  where
-    lTarget  = logObjective target
-    glTarget = handleGradient $ gradient target
 
--- | Build the 'tree' of candidate states.
 buildTree lTarget glTarget t r logu v 0 e = do
   let (t0, r0) = leapfrog glTarget (t, r) (v * e)
       joint    = log $ auxilliaryTarget lTarget t0 r0
@@ -103,11 +113,10 @@ stopCriterion tn tp rn rp =
 
 -- | Simulate a single step of Hamiltonian dynamics.
 leapfrog :: Gradient -> Particle -> Double -> Particle
-leapfrog glTarget (t, r) e = (tf, rf)
-  where 
-    rm = adjustMomentum glTarget e t r
-    tf = adjustPosition e rm t
-    rf = adjustMomentum glTarget e tf rm
+leapfrog glTarget (t, r) e = (tf, rf) where 
+  rm = adjustMomentum glTarget e t r
+  tf = adjustPosition e rm t
+  rf = adjustMomentum glTarget e tf rm
 
 -- | Adjust momentum.
 adjustMomentum :: (Fractional c, Unbox c)

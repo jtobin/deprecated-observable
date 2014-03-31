@@ -10,8 +10,8 @@ import System.Random.MWC hiding (uniform)
 import qualified System.Random.MWC as MWC
 import qualified System.Random.MWC.Distributions as MWC.Dist
 
-sampleIO :: Observable IO r -> IO r
-sampleIO = withSystemRandom . asGenIO . sample
+observeIO :: Observable IO r -> IO r
+observeIO = withSystemRandom . asGenIO . observe
 
 expectation
   :: Monad m
@@ -20,7 +20,7 @@ expectation
   -> Observable m a
   -> Gen (PrimState m)
   -> m Double
-expectation n f p = sample $ go n 0 where
+expectation n f p = observe $ go n 0 where
   go 0  !s = return s
   go !j !s = do
     x <- liftM f p
@@ -120,7 +120,7 @@ binomial n p = liftM (length . filter id) $ replicateM n (bernoulli p)
 --   -> Int
 --   -> Gen (PrimState m)
 --   -> m [Vector a]
--- traceChain f t o n = sample $ replicateM n (t f) `evalStateT` o
+-- traceChain f t o n = observe $ replicateM n (t f) `evalStateT` o
 -- 
 -- 
 -- 
@@ -140,7 +140,7 @@ binomial n p = liftM (length . filter id) $ replicateM n (bernoulli p)
 -- --    | otherwise          = scan (succ n) (r - fst (f n))
 -- 
 -- -- | Example discrete distribution expressed in above fashion.
--- -- ex: sampleIO $ countableSupport exampleDiscrete
+-- -- ex: observeIO $ countableSupport exampleDiscrete
 -- --exampleDiscrete j = dist !! (j - 1)
 -- --  where dist = [(0.01, return 1), (0.9, return 2), (0.09, return 3)]
 -- 

@@ -37,5 +37,5 @@ traceChain
   -> Chain a
   -> Gen (PrimState m)
   -> m [Vector a]
-traceChain n t o = sample $ replicateM n t `evalStateT` o
+traceChain n t o = observe $ replicateM n t `evalStateT` o
 

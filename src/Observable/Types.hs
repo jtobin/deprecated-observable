@@ -1,5 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-
 module Observable.Types where
 
 import Control.Applicative
@@ -10,10 +8,9 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Vector.Unboxed (Vector, Unbox)
 import qualified Data.Vector.Unboxed as V
-import GHC.Generics (Generic)
 import System.Random.MWC
 
-newtype Observable m a = Observable { sample :: Gen (PrimState m) -> m a }
+newtype Observable m a = Observable { observe :: Gen (PrimState m) -> m a }
 
 instance Monad m => Functor (Observable m) where
   fmap h (Observable f) = Observable $ liftM h . f
@@ -25,8 +22,8 @@ instance Monad m => Applicative (Observable m) where
 instance Monad m => Monad (Observable m) where
   return x = Observable $ const (return x)
   m >>= h  = Observable $ \g -> do
-    z <- sample m g
-    sample (h z) g
+    z <- observe m g
+    observe (h z) g
 
 instance MonadTrans Observable where
   lift m = Observable $ const m
@@ -37,8 +34,10 @@ data Target a = Target {
   }
 
 createTargetWithGradient
-  :: (Vector a -> Double) -> (Vector a -> Vector a) -> Target a
-createTargetWithGradient f g  = Target f (Just g)
+  :: (Vector a -> Double)
+  -> (Vector a -> Vector a)
+  -> Target a
+createTargetWithGradient f g = Target f (Just g)
 
 createTargetWithoutGradient :: (Vector a -> Double) -> Target a
 createTargetWithoutGradient f = Target f Nothing
@@ -47,9 +46,15 @@ handleGradient :: Maybe t -> t
 handleGradient Nothing  = error "handleGradient: no gradient provided"
 handleGradient (Just g) = g
 
-data Algorithm = MH | HMC deriving (Eq, Show, Generic)
+data Algorithm =
+    MH
+  | HMC
+  | Slice
+  | NUTS
+  deriving (Eq, Show)
 
-instance Hashable Algorithm
+instance Hashable Algorithm where
+  hashWithSalt n = hashWithSalt n . show
 
 type OptionalStore = HashMap Algorithm OptionalInfo
 
