@@ -11,18 +11,20 @@ import Observable.Types
 -- experimental
 -- this needs to be handled differently, maybe by way of the store..
 
-anneal
-  :: PrimMonad m => Double -> Transition m Double -> Transition m Double
-anneal s t = annealer s >> t >> annealer (1 / s)
-
-annealer :: PrimMonad m => Double -> Transition m Double
-annealer v = do
-  Chain next (Target l mg) _ store <- get
-  let l' xs = v * l xs
+anneal :: PrimMonad m => Double -> Transition m Double -> Transition m Double
+anneal temperature baseTransition = do
+  Chain next target@(Target l mg) _ store <- get
+  let l' xs = temperature * l xs
       g' = case mg of
              Nothing -> Nothing
-             Just g  -> Just (V.map (* v) . g)
+             Just g  -> Just (V.map (* temperature) . g)
       target' = Target l' g'
-  put $ Chain next target' (l' next) store
-  return next
+
+  modify (\(Chain n _ _ s) -> Chain n target' (l' next) s)
+
+  baseTransition
+
+  modify (\(Chain n _ _ s) -> Chain n target (logObjective target n) s)
+  Chain n _ _ _ <- get
+  return n
 
