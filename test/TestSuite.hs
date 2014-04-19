@@ -13,6 +13,7 @@ import qualified Data.Vector.Unboxed as V
 import GHC.Word
 import Observable.Core
 import Observable.MCMC
+import Observable.MCMC.Anneal
 import Observable.MCMC.Hamiltonian
 import Observable.MCMC.MetropolisHastings
 import Observable.MCMC.NUTS
@@ -21,10 +22,10 @@ import Observable.Types
 import System.IO
 import System.Random.MWC hiding (Gen)
 import Test.Hspec
-import Test.QuickCheck hiding (vector, vectorOf, sample)
+import Test.QuickCheck hiding (vector, vectorOf, sample, frequency)
 
-prettyPrint :: Vector Double -> IO ()
-prettyPrint = putStrLn . filter (`notElem` "fromList []") . show
+prettyPrint :: Handle -> Vector Double -> IO ()
+prettyPrint h = hPutStrLn h . filter (`notElem` "fromList []") . show
 
 rosenbrock :: Target Double
 rosenbrock = createTargetWithGradient lRosenbrock glRosenbrock where
@@ -166,6 +167,15 @@ customStrategy = do
   slice 3.0
   nuts
 
+annealingStrategy :: PrimMonad m => Transition m Double
+annealingStrategy = anneal 0.5 $ nuts
+
+occasionallyJump :: PrimMonad m => Transition m Double
+occasionallyJump = frequency
+  [ (4, slice 1.0)
+  , (1, nuts)
+  ]
+
 rosenbrockChain :: Chain Double
 rosenbrockChain = Chain position target value empty where
   position = V.fromList [1.0, 1.0]
@@ -190,33 +200,38 @@ bealeChain = Chain position target value empty where
   target   = beale
   value    = logObjective target position
 
-hmcTrace :: Chain Double -> IO ()
-hmcTrace chain = withSystemRandom . asGenIO $ \g -> do
-  cs <- traceChain 10000 hmcStrategy chain g
-  mapM_ prettyPrint cs
+genericTrace :: Transition IO Double -> Chain Double -> Handle -> IO ()
+genericTrace strategy chain h = withSystemRandom . asGenIO $ \g ->
+  traceChain 1000 strategy chain g >>= mapM_ (prettyPrint h)
 
-sliceTrace :: Chain Double -> IO ()
-sliceTrace chain = withSystemRandom . asGenIO $ \g -> do
-  cs <- traceChain 10000 sliceStrategy chain g
-  mapM_ prettyPrint cs
+hmcTrace :: Chain Double -> Handle -> IO ()
+hmcTrace = genericTrace hmcStrategy
 
-customTrace :: Chain Double -> IO ()
-customTrace chain = withSystemRandom . asGenIO $ \g -> do
-  cs <- traceChain 10000 customStrategy chain g
-  mapM_ prettyPrint cs
+sliceTrace :: Chain Double -> Handle -> IO ()
+sliceTrace = genericTrace sliceStrategy
 
-mhTrace :: Chain Double -> IO ()
-mhTrace chain = withSystemRandom . asGenIO $ \g -> do
-  cs <- traceChain 10000 mhStrategy chain g
-  mapM_ prettyPrint cs
+mhTrace :: Chain Double -> Handle -> IO ()
+mhTrace = genericTrace mhStrategy
 
-nutsTrace :: Chain Double -> IO ()
-nutsTrace chain = withSystemRandom . asGenIO $ \g -> do
-  cs <- traceChain 10000 nutsStrategy chain g
-  mapM_ prettyPrint cs
+nutsTrace :: Chain Double -> Handle -> IO ()
+nutsTrace = genericTrace nutsStrategy
 
+customTrace :: Chain Double -> Handle -> IO ()
+customTrace = genericTrace customStrategy
+
+jumpTrace :: Chain Double -> Handle -> IO ()
+jumpTrace = genericTrace occasionallyJump
+
+annealTrace :: Chain Double -> Handle -> IO ()
+annealTrace = genericTrace annealingStrategy
+
+main :: IO ()
 main = withSystemRandom . asGenIO $ \g -> do
   let chains = [rosenbrockChain, himmelblauChain, bnnChain, bealeChain]
-  chain <- observe (categorical chains) g
-  customTrace chain
+      chain  = rosenbrockChain
+  -- chain <- observe (categorical chains) g
+
+  h <- openFile "./test/trace.dat" WriteMode
+  annealTrace chain h
+  hClose h
 

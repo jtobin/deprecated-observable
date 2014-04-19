@@ -20,6 +20,13 @@ oneOf ts = do
   j <- lift $ uniform (0, length ts - 1)
   ts !! j
 
+frequency :: PrimMonad m => [(Int, Transition m a)] -> Transition m a
+frequency xs = lift (uniform (1, tot)) >>= (`pick` xs) where
+  tot = sum . map fst $ xs
+  pick n ((k, v):vs)
+    | n <= k = v
+    | otherwise = pick (n - k) vs
+
 firstWithProb
   :: PrimMonad m 
   => Double
