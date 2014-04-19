@@ -168,7 +168,10 @@ customStrategy = do
   nuts
 
 annealingStrategy :: PrimMonad m => Transition m Double
-annealingStrategy = anneal 0.5 $ nuts
+annealingStrategy = do
+  anneal 0.05 $ metropolisHastings (Just 1.0)
+  metropolisHastings (Just 1.0)
+  anneal 0.05 $ metropolisHastings (Just 1.0)
 
 occasionallyJump :: PrimMonad m => Transition m Double
 occasionallyJump = frequency
@@ -202,7 +205,7 @@ bealeChain = Chain position target value empty where
 
 genericTrace :: Transition IO Double -> Chain Double -> Handle -> IO ()
 genericTrace strategy chain h = withSystemRandom . asGenIO $ \g ->
-  traceChain 1000 strategy chain g >>= mapM_ (prettyPrint h)
+  traceChain 5000 strategy chain g >>= mapM_ (prettyPrint h)
 
 hmcTrace :: Chain Double -> Handle -> IO ()
 hmcTrace = genericTrace hmcStrategy
