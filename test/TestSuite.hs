@@ -167,11 +167,20 @@ customStrategy = do
   slice 3.0
   nuts
 
+-- cool!
 annealingStrategy :: PrimMonad m => Transition m Double
 annealingStrategy = do
-  anneal 0.05 $ metropolisHastings (Just 1.0)
-  metropolisHastings (Just 1.0)
-  anneal 0.05 $ metropolisHastings (Just 1.0)
+  let transition = frequency
+        [ (5, metropolisHastings (Just 1.5))
+        , (4, slice 1.0)
+        , (1, nuts)
+        ]
+  anneal 0.70 $ transition
+  anneal 0.05 $ transition
+  anneal 0.01 $ transition
+  anneal 0.05 $ transition
+  anneal 0.70 $ transition
+  transition
 
 occasionallyJump :: PrimMonad m => Transition m Double
 occasionallyJump = frequency
@@ -231,7 +240,7 @@ annealTrace = genericTrace annealingStrategy
 main :: IO ()
 main = withSystemRandom . asGenIO $ \g -> do
   let chains = [rosenbrockChain, himmelblauChain, bnnChain, bealeChain]
-      chain  = rosenbrockChain
+      chain  = himmelblauChain
   -- chain <- observe (categorical chains) g
 
   h <- openFile "./test/trace.dat" WriteMode

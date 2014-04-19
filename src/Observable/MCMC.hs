@@ -37,6 +37,8 @@ firstWithProb p t0 t1 = do
   s <- lift $ bernoulli p
   if s then t0 else t1
 
+-- | Trace a Markov chain realized by repeating the same transition operator n
+--   times.
 traceChain
   :: Monad m
   => Int
@@ -45,4 +47,24 @@ traceChain
   -> Gen (PrimState m)
   -> m [Vector a]
 traceChain n t o = observe $ replicateM n t `evalStateT` o
+
+-- | Trace a Markov chain realized by the provided list of transition
+--   operators.
+traceTransitions
+  :: Monad m
+  => [Transition m a]
+  -> Chain a
+  -> Gen (PrimState m)
+  -> m [Vector a]
+traceTransitions ts o = observe $ mapM (`evalStateT` o) ts
+
+annealTransitions :: Monad m => [Transition m Double] -> [Transition m Double]
+annealTransitions ts = undefined where
+  l = length ts
+
+-- rapid heating, stay hot for awhile, slower cooling
+-- increase to high temperature immediately, then slowly cool.  want to do a
+-- slow exponential version of linspace, sort of
+  
+
 
