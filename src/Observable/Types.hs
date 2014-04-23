@@ -20,8 +20,8 @@ instance Monad m => Applicative (Observable m) where
   (<*>) = ap
 
 instance Monad m => Monad (Observable m) where
-  return x = Observable $ const (return x)
-  m >>= h  = Observable $ \g -> do
+  return  = Observable . const . return
+  m >>= h = Observable $ \g -> do
     z <- observe m g
     observe (h z) g
 
@@ -49,6 +49,7 @@ handleGradient (Just g) = g
 data Algorithm =
     MH
   | HMC
+  | MALA
   | Slice
   | NUTS
   deriving (Eq, Show)
@@ -74,5 +75,12 @@ data Chain a = Chain {
 instance (Show a, Unbox a) => Show (Chain a) where
   show = show . parameterSpacePosition
 
-type Transition m a = StateT (Chain a) (Observable m) (Vector a)
+-- some of these can be pruned
+type Transition m a        = StateT (Chain a) (Observable m) (Vector a)
+type MarkovChain m a       = StateT (Chain a) (Observable m) [Vector a]
+type CoupledTransition m a = StateT (Chain a, Chain a) (Observable m) (Vector a)
+type CoupledChains m a     = StateT (Chain a, Chain a) (Observable m) [Vector a]
+
+-- type CoupledChains3 m a =
+--   StateT (Chain a, Chain a, Chain a) (Observable m) (Vector a)
 

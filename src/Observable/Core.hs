@@ -91,44 +91,6 @@ bernoulli p = (< p) <$> unit
 binomial :: PrimMonad m => Int -> Double -> Observable m Int
 binomial n p = liftM (length . filter id) $ replicateM n (bernoulli p)
 
--- -- | Markov chain constructor.
--- initializeChain :: Unbox a => Target a -> [a] -> a -> MarkovChain a
--- initializeChain t as = MarkovChain vs (logObjective t vs)
---   where vs = V.fromList as
--- 
--- -- | Characterize a probability distribution by way of a Markov chain with the
--- --   same ergodic distribution.
--- ergodicSampler
---   :: PrimMonad m
---   => Transition a
---   -> MarkovChain a
---   -> Int
---   -> Target a
---   -> Observable m (MarkovChain a)
--- ergodicSampler t o n f = replicateM_ n (t f) `execStateT` o
--- 
--- erSampler :: PrimMonad m => Chain a -> Int -> Observable m (Chain a)
--- erSampler m n = replicateM_ n (transitionOperator m m) `execStateT` m
--- 
--- 
--- -- | Return the trace of a Markov chain.
--- traceChain
---   :: PrimMonad m
---   => Target a
---   -> Transition a
---   -> MarkovChain a
---   -> Int
---   -> Gen (PrimState m)
---   -> m [Vector a]
--- traceChain f t o n = observe $ replicateM n (t f) `evalStateT` o
--- 
--- 
--- 
--- -- | Simple gradient error handling.
--- handleGradient :: Maybe t -> t
--- handleGradient Nothing  = error "handleGradient: no gradient provided"
--- handleGradient (Just g) = g
--- 
 -- -- | Abstract distributions with countable support.
 -- --countableSupport
 -- --  :: (Enum a, Num a, Num b, Ord b, Variate b, PrimMonad m)
@@ -143,4 +105,4 @@ binomial n p = liftM (length . filter id) $ replicateM n (bernoulli p)
 -- -- ex: observeIO $ countableSupport exampleDiscrete
 -- --exampleDiscrete j = dist !! (j - 1)
 -- --  where dist = [(0.01, return 1), (0.9, return 2), (0.09, return 3)]
--- 
+

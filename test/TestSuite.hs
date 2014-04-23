@@ -16,6 +16,7 @@ import Observable.MCMC
 import Observable.MCMC.Anneal
 import Observable.MCMC.Hamiltonian
 import Observable.MCMC.MetropolisHastings
+import Observable.MCMC.MALA
 import Observable.MCMC.NUTS
 import Observable.MCMC.Slice
 import Observable.Types
@@ -144,10 +145,10 @@ mhStrategy =
   in  interleave $ map (metropolisHastings . Just) radials 
 
 hmcStrategy :: PrimMonad m => Transition m Double
-hmcStrategy = do
-  hamiltonian (Just 0.01) (Just 10)
-  hamiltonian (Just 0.05) (Just 10)
-  hamiltonian (Just 0.10) (Just 10)
+hmcStrategy = hamiltonian (Just 0.05) (Just 10)
+
+malaStrategy :: PrimMonad m => Transition m Double
+malaStrategy = mala (Just 0.15)
 
 sliceStrategy :: PrimMonad m => Transition m Double
 sliceStrategy = do
@@ -167,20 +168,20 @@ customStrategy = do
   slice 3.0
   nuts
 
--- cool!
 annealingStrategy :: PrimMonad m => Transition m Double
 annealingStrategy = do
-  let transition = frequency
-        [ (5, metropolisHastings (Just 1.5))
-        , (4, slice 1.0)
-        , (1, nuts)
-        ]
-  anneal 0.70 $ transition
-  anneal 0.05 $ transition
-  anneal 0.01 $ transition
-  anneal 0.05 $ transition
-  anneal 0.70 $ transition
-  transition
+  anneal 0.70 $ randomStrategy
+  anneal 0.05 $ randomStrategy
+  anneal 0.05 $ randomStrategy
+  anneal 0.70 $ randomStrategy
+  randomStrategy
+
+randomStrategy :: PrimMonad m => Transition m Double
+randomStrategy = frequency
+  [ (5, metropolisHastings (Just 1.5))
+  , (4, slice 1.0)
+  , (1, nuts)
+  ]
 
 occasionallyJump :: PrimMonad m => Transition m Double
 occasionallyJump = frequency
@@ -213,11 +214,19 @@ bealeChain = Chain position target value empty where
   value    = logObjective target position
 
 genericTrace :: Transition IO Double -> Chain Double -> Handle -> IO ()
-genericTrace strategy chain h = withSystemRandom . asGenIO $ \g ->
-  traceChain 5000 strategy chain g >>= mapM_ (prettyPrint h)
+genericTrace strategy chain h = create >>= \g ->
+  traceChain 10000 strategy chain g >>= mapM_ (prettyPrint h)
+
+annealingTrace :: Chain Double -> Handle -> IO ()
+annealingTrace chain h = create >>= \g -> do
+  let c = annealTransitions $ replicate 5000 (metropolisHastings (Just 1.0) )
+  traceMarkovChain c chain g >>= mapM_ (prettyPrint h)
 
 hmcTrace :: Chain Double -> Handle -> IO ()
 hmcTrace = genericTrace hmcStrategy
+
+malaTrace :: Chain Double -> Handle -> IO ()
+malaTrace = genericTrace malaStrategy
 
 sliceTrace :: Chain Double -> Handle -> IO ()
 sliceTrace = genericTrace sliceStrategy
@@ -238,12 +247,12 @@ annealTrace :: Chain Double -> Handle -> IO ()
 annealTrace = genericTrace annealingStrategy
 
 main :: IO ()
-main = withSystemRandom . asGenIO $ \g -> do
-  let chains = [rosenbrockChain, himmelblauChain, bnnChain, bealeChain]
-      chain  = himmelblauChain
+main = do
+  let chain  = rosenbrockChain
+  -- chains = [rosenbrockChain, himmelblauChain, bnnChain, bealeChain]
   -- chain <- observe (categorical chains) g
 
   h <- openFile "./test/trace.dat" WriteMode
-  annealTrace chain h
+  malaTrace chain h
   hClose h
 
