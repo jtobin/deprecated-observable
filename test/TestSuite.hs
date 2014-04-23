@@ -186,6 +186,7 @@ randomStrategy = frequency
 occasionallyJump :: PrimMonad m => Transition m Double
 occasionallyJump = frequency
   [ (4, slice 1.0)
+  , (2, mala (Just 0.15))
   , (1, nuts)
   ]
 
@@ -248,11 +249,11 @@ annealTrace = genericTrace annealingStrategy
 
 main :: IO ()
 main = do
-  let chain  = rosenbrockChain
+  let chain  = bnnChain
   -- chains = [rosenbrockChain, himmelblauChain, bnnChain, bealeChain]
   -- chain <- observe (categorical chains) g
 
   h <- openFile "./test/trace.dat" WriteMode
-  malaTrace chain h
+  jumpTrace chain h
   hClose h
 
