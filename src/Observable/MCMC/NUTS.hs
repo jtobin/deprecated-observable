@@ -1,3 +1,5 @@
+{-# LANGUAGE DoAndIfThenElse #-}
+
 module Observable.MCMC.NUTS (nuts) where
 
 import Control.Monad
@@ -23,7 +25,7 @@ getStepSize Nothing store = e where
   (ODouble e) = HashMap.lookupDefault (ODouble 0.1) NUTS store
 
 updateStepSize :: Double -> OptionalStore -> OptionalStore
-updateStepSize e = HashMap.insert NUTS (ODouble e) 
+updateStepSize e = HashMap.insert NUTS (ODouble e)
 
 -- | The NUTS transition kernel.
 nuts :: PrimMonad m => Transition m Double
@@ -41,14 +43,14 @@ nuts = do
               vj <- lift $ categorical [-1, 1]
               z  <- lift unit
 
-              (tnn, rnn, tpp, rpp, t1, n1, s1) <- 
+              (tnn, rnn, tpp, rpp, t1, n1, s1) <-
                 if   vj == -1
                 then do
-                  (tnn', rnn', _, _, t1', n1', s1') <- 
+                  (tnn', rnn', _, _, t1', n1', s1') <-
                     buildTree lTarget glTarget tn rn logu vj j e
                   return (tnn', rnn', tp, rp, t1', n1', s1')
                 else do
-                  (_, _, tpp', rpp', t1', n1', s1') <- 
+                  (_, _, tpp', rpp', t1', n1', s1') <-
                     buildTree lTarget glTarget tp rp logu vj j e
                   return (tn, rn, tpp', rpp', t1', n1', s1')
 
@@ -77,19 +79,19 @@ buildTree lTarget glTarget t r logu v 0 e = do
 
 buildTree lTarget glTarget t r logu v j e = do
   z <- lift unit
-  (tn, rn, tp, rp, t0, n0, s0) <- 
+  (tn, rn, tp, rp, t0, n0, s0) <-
     buildTree lTarget glTarget t r logu v (pred j) e
 
   if   s0 == 1
   then do
-    (tnn, rnn, tpp, rpp, t1, n1, s1) <- 
+    (tnn, rnn, tpp, rpp, t1, n1, s1) <-
       if   v == -1
       then do
-        (tnn', rnn', _, _, t1', n1', s1') <- 
+        (tnn', rnn', _, _, t1', n1', s1') <-
           buildTree lTarget glTarget tn rn logu v (pred j) e
         return (tnn', rnn', tp, rp, t1', n1', s1')
       else do
-        (_, _, tpp', rpp', t1', n1', s1') <- 
+        (_, _, tpp', rpp', t1', n1', s1') <-
           buildTree lTarget glTarget tp rp logu v (pred j) e
         return (tn, rn, tpp', rpp', t1', n1', s1')
 
@@ -97,7 +99,7 @@ buildTree lTarget glTarget t r logu v j e = do
         n2     = n0 + n1
         s2     = s0 * s1 * stopCriterion tnn tpp rnn rpp
         t2     | accept    = t1
-               | otherwise = t0 
+               | otherwise = t0
 
     return (tnn, rnn, tpp, rpp, t2, n2, s2)
   else return (tn, rn, tp, rp, t0, n0, s0)
@@ -105,7 +107,7 @@ buildTree lTarget glTarget t r logu v j e = do
 -- | Determine whether or not to stop doubling the tree of candidate states.
 stopCriterion :: (Integral a, Num b, Ord b, Unbox b)
   => Vector b -> Vector b -> Vector b -> Vector b -> a
-stopCriterion tn tp rn rp = 
+stopCriterion tn tp rn rp =
       indicate (positionDifference `innerProduct` rn >= 0)
     * indicate (positionDifference `innerProduct` rp >= 0)
   where
@@ -113,7 +115,7 @@ stopCriterion tn tp rn rp =
 
 -- | Simulate a single step of Hamiltonian dynamics.
 leapfrog :: Gradient -> Particle -> Double -> Particle
-leapfrog glTarget (t, r) e = (tf, rf) where 
+leapfrog glTarget (t, r) e = (tf, rf) where
   rm = adjustMomentum glTarget e t r
   tf = adjustPosition e rm t
   rf = adjustMomentum glTarget e tf rm
@@ -133,7 +135,7 @@ acceptanceRatio :: (Floating a, Unbox a)
 acceptanceRatio lTarget t0 t1 r0 r1 = auxilliaryTarget lTarget t1 r1
                                     / auxilliaryTarget lTarget t0 r0
 
--- | The negative potential. 
+-- | The negative potential.
 auxilliaryTarget :: (Floating a, Unbox a) => (t -> a) -> t -> Vector a -> a
 auxilliaryTarget lTarget t r = exp (lTarget t - 0.5 * innerProduct r r)
 

@@ -40,6 +40,7 @@ perturb target position e = do
   zs <- V.replicateM (V.length position) standardNormal
   return $ localMean target position e .+ (e .* zs)
 
+mala :: PrimMonad m => Maybe Double -> Transition m Double
 mala e = do
   Chain current target _ store <- get
   let step = getStepSize e store
@@ -60,7 +61,7 @@ getStepSize Nothing store = step where
   (ODouble step) = HashMap.lookupDefault (ODouble 1.0) MALA store
 
 updateStepSize :: Double -> OptionalStore -> OptionalStore
-updateStepSize step = HashMap.insert MALA (ODouble step) 
+updateStepSize step = HashMap.insert MALA (ODouble step)
 
 nextState
   :: Target Double
@@ -73,7 +74,7 @@ nextState target (current, cMean) (proposal, pMean) e z
     | z < acceptProb = proposal
     | otherwise      = current
   where
-    ratio = acceptRatio target (current, cMean) (proposal, pMean) e 
+    ratio = acceptRatio target (current, cMean) (proposal, pMean) e
     acceptProb | isNaN ratio = 0
                | otherwise   = ratio
 

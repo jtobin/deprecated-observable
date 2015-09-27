@@ -15,8 +15,8 @@ import Observable.Core
 import Observable.MCMC
 import Observable.MCMC.Anneal
 import Observable.MCMC.Hamiltonian
-import Observable.MCMC.MetropolisHastings
 import Observable.MCMC.MALA
+import Observable.MCMC.MetropolisHastings
 import Observable.MCMC.NUTS
 import Observable.MCMC.Slice
 import Observable.Types
@@ -28,13 +28,14 @@ import Test.QuickCheck hiding (vector, vectorOf, sample, frequency)
 prettyPrint :: Handle -> Vector Double -> IO ()
 prettyPrint h = hPutStrLn h . filter (`notElem` "fromList []") . show
 
+
 rosenbrock :: Target Double
 rosenbrock = createTargetWithGradient lRosenbrock glRosenbrock where
   lRosenbrock :: Vector Double -> Double
   lRosenbrock xs =
     let [x0, x1] = V.toList xs
     in  (-1) * (5 * (x1 - x0 ^ 2) ^ 2 + 0.05 * (1 - x0) ^ 2)
-  
+
   glRosenbrock :: Vector Double -> Vector Double
   glRosenbrock xs =
     let [x, y] = V.toList xs
@@ -48,7 +49,7 @@ himmelblau = createTargetWithGradient lHimmelblau glHimmelblau where
   lHimmelblau xs =
     let [x0, x1] = V.toList xs
     in  (-1) * ((x0 * x0 + x1 - 11) ^ 2 + (x0 + x1 * x1 - 7) ^ 2)
-  
+
   glHimmelblau :: Vector Double -> Vector Double
   glHimmelblau xs =
     let [x, y] = V.toList xs
@@ -64,7 +65,7 @@ bnn = createTargetWithGradient lBnn glBnn where
   lBnn xs =
     let [x0, x1] = V.toList xs
     in  -0.5 * (x0 ^ 2 * x1 ^ 2 + x0 ^ 2 + x1 ^ 2 - 8 * x0 - 8 * x1)
-  
+
   glBnn :: Vector Double -> Vector Double
   glBnn xs =
     let [x, y] = V.toList xs
@@ -82,10 +83,10 @@ beale = createTargetWithGradient lBeale glBeale where
       | otherwise = - (1 / 0)
     where
       [x0, x1] = V.toList xs
-  
+
   glBeale :: Vector Double -> Vector Double
   glBeale xs =
-    let [x0, x1] = V.toList xs 
+    let [x0, x1] = V.toList xs
         dx = negate $ 2 * (1.5 - x0 + x0 * x1) * ((-1) + x1)
             + 2.25  * 2 * (2.25 - x0 + x0 * x1 ^ 2) * ((-1) + x1 ^ 2)
             + 2.625 * 2 * (2.2625 - x0 + x0 * x1 ^ 3) * ((-1) + x1 ^ 3)
@@ -117,8 +118,8 @@ spec_scalarTimesVector = describe "(.*)" $ do
        (e .* vs) V.! j == e * (vs V.! j)
 
 spec_metropolisHastings :: Spec
-spec_metropolisHastings = describe "metropolisHastings" $ 
-  it "should move around the state space" $ 
+spec_metropolisHastings = describe "metropolisHastings" $
+  it "should move around the state space" $
     property $ do
       targetDist <- target
       mwcSeed    <- arbitrary :: Gen Word32
@@ -140,9 +141,9 @@ runSpecs = hspec $ do
   spec_metropolisHastings
 
 mhStrategy :: PrimMonad m => Transition m Double
-mhStrategy = 
-  let radials = [0.1, 0.5, 1.0, 2.0, 2.5]  
-  in  interleave $ map (metropolisHastings . Just) radials 
+mhStrategy =
+  let radials = [0.1, 0.5, 1.0, 2.0, 2.5]
+  in  interleave $ map (metropolisHastings . Just) radials
 
 hmcStrategy :: PrimMonad m => Transition m Double
 hmcStrategy = hamiltonian (Just 0.05) (Just 10)
@@ -247,13 +248,55 @@ jumpTrace = genericTrace occasionallyJump
 annealTrace :: Chain Double -> Handle -> IO ()
 annealTrace = genericTrace annealingStrategy
 
+mcmc = traceChain
+
+trace :: Int -> Chain Double -> Transition IO Double -> Handle -> IO ()
+trace n chain strategy h = do
+  prng <- create
+  samples <- mcmc n strategy chain prng
+  mapM_ (prettyPrint h) samples
+
+mhNutsStrategy :: PrimMonad m => Transition m Double
+mhNutsStrategy = do
+  firstWithProb 0.9
+    (metropolisHastings (Just 0.1))
+    nuts
+
+mhMalaStrategy :: PrimMonad m => Transition m Double
+mhMalaStrategy = do
+  firstWithProb 0.9
+    (metropolisHastings (Just 1.0))
+    (mala (Just 0.1))
+
+dissStrat1 = metropolisHastings (Just 0.1)
+dissChain1 = trace 10000 rosenbrockChain dissStrat1
+
+dissStrat2 = mhStrategy
+dissChain2 = trace 2000 rosenbrockChain dissStrat2
+
+dissStrat3 = metropolisHastings (Just 2.5)
+dissChain3 = trace 10000 rosenbrockChain dissStrat3
+
+-- dissStrat4 = mhMalaStrategy
+-- dissChain4 = trace 10000 rosenbrockChain dissStrat4
+
 main :: IO ()
 main = do
   let chain  = bnnChain
-  -- chains = [rosenbrockChain, himmelblauChain, bnnChain, bealeChain]
-  -- chain <- observe (categorical chains) g
 
-  h <- openFile "./test/trace.dat" WriteMode
-  jumpTrace chain h
+  h <- openFile "./test/trace1.dat" WriteMode
+  dissChain1 h
   hClose h
+
+  h <- openFile "./test/trace2.dat" WriteMode
+  dissChain2 h
+  hClose h
+
+  h <- openFile "./test/trace3.dat" WriteMode
+  dissChain3 h
+  hClose h
+
+  -- h <- openFile "./test/trace4.dat" WriteMode
+  -- dissChain4 h
+  -- hClose h
 

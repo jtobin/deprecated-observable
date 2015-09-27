@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Observable.MCMC.Slice where
@@ -41,7 +42,7 @@ findBracket f j step height xs = go step xs xs where
         return (bl `V.unsafeIndex` j , br `V.unsafeIndex` j)
     | f bl <  height && f br >= height = do
         br0 <- expandBracketRight j e br
-        go (2 * e) bl br0 
+        go (2 * e) bl br0
     | f bl >= height && f br <  height = do
         bl0 <- expandBracketLeft j e bl
         go (2 * e) bl0 br

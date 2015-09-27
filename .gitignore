@@ -10,3 +10,4 @@ sandbox
 cabal.sandbox.config
 .cabal-sandbox
 traces.r
+.stack-work
