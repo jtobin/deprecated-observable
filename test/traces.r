@@ -32,6 +32,11 @@ handles = c(
   , "random-himmelblau"
   , "random-bnn"
 
+  , "annealed-rosenbrock"
+  , "annealed-beale"
+  , "annealed-himmelblau"
+  , "annealed-bnn"
+
   )
 
 worker = function(handle) {
@@ -47,6 +52,8 @@ worker = function(handle) {
   e = effectiveSize(m)
   print(paste(handle, e))
   }
+
+for (handle in handles) worker(handle)
 
 
 

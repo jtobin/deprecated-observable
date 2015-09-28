@@ -259,7 +259,7 @@ tracer =
       , ("nuts", 10000, nutsBaseStrategy)
       , ("custom", 3333, customStrategy)
       , ("random", 10000, randomStrategy)
-      -- , ("jump", 10000, occasionallyJump)
+      , ("annealed", 2000, annealingStrategy)
       ]
     chains = [
         ("rosenbrock", rosenbrockChain)
