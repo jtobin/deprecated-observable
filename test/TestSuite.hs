@@ -1,4 +1,4 @@
-module TestSuite where
+module Main where
 
 import Control.Applicative hiding (empty)
 import Control.Monad
@@ -28,6 +28,7 @@ import Test.QuickCheck hiding (vector, vectorOf, sample, frequency)
 prettyPrint :: Handle -> Vector Double -> IO ()
 prettyPrint h = hPutStrLn h . filter (`notElem` "fromList []") . show
 
+-- targets --------------------------------------------------------------------
 
 rosenbrock :: Target Double
 rosenbrock = createTargetWithGradient lRosenbrock glRosenbrock where
@@ -95,6 +96,208 @@ beale = createTargetWithGradient lBeale glBeale where
                     + 2 * (2.625 - x0 + x0 * x1 ^ 3) * 3 * x0 * x1 ^ 2
     in  V.fromList [dx, dy]
 
+-- strategies -----------------------------------------------------------------
+
+mhBaseStrategy :: PrimMonad m => Transition m Double
+mhBaseStrategy = metropolisHastings (Just 1)
+
+mhRadialStrategy :: PrimMonad m => Transition m Double
+mhRadialStrategy =
+  let radials = [0.1, 0.5, 1.0, 2.0, 2.5]
+  in  interleave $ map (metropolisHastings . Just) radials
+
+hmcBaseStrategy :: PrimMonad m => Transition m Double
+hmcBaseStrategy = hamiltonian (Just 0.05) (Just 10)
+
+malaBaseStrategy :: PrimMonad m => Transition m Double
+malaBaseStrategy = mala (Just 0.15)
+
+sliceStrategy :: PrimMonad m => Transition m Double
+sliceStrategy = do
+  slice 0.5
+  slice 1.0
+  oneOf [slice 4.0, slice 10.0]
+
+nutsBaseStrategy :: PrimMonad m => Transition m Double
+nutsBaseStrategy = do
+  nuts
+
+customStrategy :: PrimMonad m => Transition m Double
+customStrategy = do
+  firstWithProb 0.8
+    (metropolisHastings (Just 3.0))
+    (hamiltonian (Just 0.05) (Just 20))
+  slice 3.0
+  nuts
+
+randomStrategy :: PrimMonad m => Transition m Double
+randomStrategy = frequency
+  [ (5, metropolisHastings (Just 1.5))
+  , (4, slice 1.0)
+  , (1, nuts)
+  ]
+
+occasionallyJump :: PrimMonad m => Transition m Double
+occasionallyJump = frequency
+  [ (4, slice 1.0)
+  , (2, mala (Just 0.15))
+  , (1, nuts)
+  ]
+
+annealingStrategy :: PrimMonad m => Transition m Double
+annealingStrategy = do
+  anneal 0.70 $ randomStrategy
+  anneal 0.05 $ randomStrategy
+  anneal 0.05 $ randomStrategy
+  anneal 0.70 $ randomStrategy
+  randomStrategy
+
+-- chains ---------------------------------------------------------------------
+
+rosenbrockChain :: Chain Double
+rosenbrockChain = Chain position target value empty where
+  position = V.fromList [1.0, 1.0]
+  target   = rosenbrock
+  value    = logObjective target position
+
+himmelblauChain :: Chain Double
+himmelblauChain = Chain position target value empty where
+  position = V.fromList [1.0, 1.0]
+  target   = himmelblau
+  value    = logObjective target position
+
+bnnChain :: Chain Double
+bnnChain = Chain position target value empty where
+  position = V.fromList [1.0, 1.0]
+  target   = bnn
+  value    = logObjective target position
+
+bealeChain :: Chain Double
+bealeChain = Chain position target value empty where
+  position = V.fromList [1.0, 1.0]
+  target   = beale
+  value    = logObjective target position
+
+-- traces ---------------------------------------------------------------------
+
+genericTrace :: Transition IO Double -> Chain Double -> Handle -> IO ()
+genericTrace strategy chain h = create >>= \g ->
+  traceChain 10000 strategy chain g >>= mapM_ (prettyPrint h)
+
+annealingTrace :: Chain Double -> Handle -> IO ()
+annealingTrace chain h = create >>= \g -> do
+  let c = annealTransitions $ replicate 5000 (metropolisHastings (Just 1.0) )
+  traceMarkovChain c chain g >>= mapM_ (prettyPrint h)
+
+hmcTrace :: Chain Double -> Handle -> IO ()
+hmcTrace = genericTrace hmcBaseStrategy
+
+malaTrace :: Chain Double -> Handle -> IO ()
+malaTrace = genericTrace malaBaseStrategy
+
+sliceTrace :: Chain Double -> Handle -> IO ()
+sliceTrace = genericTrace sliceStrategy
+
+mhTrace :: Chain Double -> Handle -> IO ()
+mhTrace = genericTrace mhRadialStrategy
+
+nutsTrace :: Chain Double -> Handle -> IO ()
+nutsTrace = genericTrace nutsBaseStrategy
+
+customTrace :: Chain Double -> Handle -> IO ()
+customTrace = genericTrace customStrategy
+
+jumpTrace :: Chain Double -> Handle -> IO ()
+jumpTrace = genericTrace occasionallyJump
+
+annealTrace :: Chain Double -> Handle -> IO ()
+annealTrace = genericTrace annealingStrategy
+
+-- main -----------------------------------------------------------------------
+
+mcmc = traceChain
+
+trace :: Int -> Chain Double -> Transition IO Double -> Handle -> IO ()
+trace n chain strategy h = do
+  prng <- create
+  samples <- mcmc n strategy chain prng
+  mapM_ (prettyPrint h) samples
+
+mhNutsStrategy :: PrimMonad m => Transition m Double
+mhNutsStrategy = do
+  firstWithProb 0.9
+    (metropolisHastings (Just 0.1))
+    nuts
+
+mhMalaStrategy :: PrimMonad m => Transition m Double
+mhMalaStrategy = do
+  firstWithProb 0.9
+    (metropolisHastings (Just 1.0))
+    (mala (Just 0.1))
+
+dissChain1 = trace 10000 rosenbrockChain mhBaseStrategy
+
+dissChain2 = trace 2000 rosenbrockChain mhRadialStrategy
+
+-- dissStrat3 = hmcBaseStrategy
+-- dissChain3 = trace 10000 rosenbrockChain hmcBaseStrategy
+--
+-- dissStrat4 = sliceStrategy
+-- dissChain4 = trace 10000 rosenbrockChain dissStrat4
+
+tracer :: PrimMonad m => [(String, Int, Chain Double, Transition m Double)]
+tracer =
+    [ (sl ++ "-" ++ cl, n, chain, strat)
+    | (cl, chain) <- chains
+    , (sl, n, strat) <- strategies
+    ]
+  where
+    strategies = [
+        ("mh" , 10000, mhBaseStrategy)
+      , ("mh-radial", 2000, mhRadialStrategy)
+      , ("hmc", 10000, hmcBaseStrategy)
+      , ("nuts", 10000, nutsBaseStrategy)
+      , ("custom", 3333, customStrategy)
+      , ("random", 10000, randomStrategy)
+      -- , ("jump", 10000, occasionallyJump)
+      ]
+    chains = [
+        ("rosenbrock", rosenbrockChain)
+      , ("beale", bealeChain)
+      , ("himmelblau", himmelblauChain)
+      , ("bnn", bnnChain)
+      ]
+
+handler (label, n, chain, strat) = do
+  h <- openFile ("./test/" ++ label ++ ".dat") WriteMode
+  trace n chain strat h
+  hClose h
+
+main :: IO ()
+main = mapM_ handler tracer
+
+  -- h <- openFile "./test/trace2.dat" WriteMode
+  -- dissChain2 h
+  -- hClose h
+
+  -- h <- openFile "./test/trace3.dat" WriteMode
+  -- dissChain3 h
+  -- hClose h
+
+  -- h <- openFile "./test/trace4.dat" WriteMode
+  -- dissChain4 h
+  -- hClose h
+
+  -- h <- openFile "./test/trace5.dat" WriteMode
+  -- dissChain5 h
+  -- hClose h
+
+  -- h <- openFile "./test/trace4.dat" WriteMode
+  -- dissChain4 h
+  -- hClose h
+
+-- deprecated -----------------------------------------------------------------
+
 vector :: (Eq a, Unbox a, Arbitrary a) => Gen (Vector a)
 vector = V.fromList <$> listOf arbitrary
 
@@ -139,164 +342,4 @@ runSpecs :: IO ()
 runSpecs = hspec $ do
   spec_scalarTimesVector
   spec_metropolisHastings
-
-mhStrategy :: PrimMonad m => Transition m Double
-mhStrategy =
-  let radials = [0.1, 0.5, 1.0, 2.0, 2.5]
-  in  interleave $ map (metropolisHastings . Just) radials
-
-hmcStrategy :: PrimMonad m => Transition m Double
-hmcStrategy = hamiltonian (Just 0.05) (Just 10)
-
-malaStrategy :: PrimMonad m => Transition m Double
-malaStrategy = mala (Just 0.15)
-
-sliceStrategy :: PrimMonad m => Transition m Double
-sliceStrategy = do
-  slice 0.5
-  slice 1.0
-  oneOf [slice 4.0, slice 10.0]
-
-nutsStrategy :: PrimMonad m => Transition m Double
-nutsStrategy = do
-  nuts
-
-customStrategy :: PrimMonad m => Transition m Double
-customStrategy = do
-  firstWithProb 0.8
-    (metropolisHastings (Just 3.0))
-    (hamiltonian (Just 0.05) (Just 20))
-  slice 3.0
-  nuts
-
-annealingStrategy :: PrimMonad m => Transition m Double
-annealingStrategy = do
-  anneal 0.70 $ randomStrategy
-  anneal 0.05 $ randomStrategy
-  anneal 0.05 $ randomStrategy
-  anneal 0.70 $ randomStrategy
-  randomStrategy
-
-randomStrategy :: PrimMonad m => Transition m Double
-randomStrategy = frequency
-  [ (5, metropolisHastings (Just 1.5))
-  , (4, slice 1.0)
-  , (1, nuts)
-  ]
-
-occasionallyJump :: PrimMonad m => Transition m Double
-occasionallyJump = frequency
-  [ (4, slice 1.0)
-  , (2, mala (Just 0.15))
-  , (1, nuts)
-  ]
-
-rosenbrockChain :: Chain Double
-rosenbrockChain = Chain position target value empty where
-  position = V.fromList [1.0, 1.0]
-  target   = rosenbrock
-  value    = logObjective target position
-
-himmelblauChain :: Chain Double
-himmelblauChain = Chain position target value empty where
-  position = V.fromList [1.0, 1.0]
-  target   = himmelblau
-  value    = logObjective target position
-
-bnnChain :: Chain Double
-bnnChain = Chain position target value empty where
-  position = V.fromList [1.0, 1.0]
-  target   = bnn
-  value    = logObjective target position
-
-bealeChain :: Chain Double
-bealeChain = Chain position target value empty where
-  position = V.fromList [1.0, 1.0]
-  target   = beale
-  value    = logObjective target position
-
-genericTrace :: Transition IO Double -> Chain Double -> Handle -> IO ()
-genericTrace strategy chain h = create >>= \g ->
-  traceChain 10000 strategy chain g >>= mapM_ (prettyPrint h)
-
-annealingTrace :: Chain Double -> Handle -> IO ()
-annealingTrace chain h = create >>= \g -> do
-  let c = annealTransitions $ replicate 5000 (metropolisHastings (Just 1.0) )
-  traceMarkovChain c chain g >>= mapM_ (prettyPrint h)
-
-hmcTrace :: Chain Double -> Handle -> IO ()
-hmcTrace = genericTrace hmcStrategy
-
-malaTrace :: Chain Double -> Handle -> IO ()
-malaTrace = genericTrace malaStrategy
-
-sliceTrace :: Chain Double -> Handle -> IO ()
-sliceTrace = genericTrace sliceStrategy
-
-mhTrace :: Chain Double -> Handle -> IO ()
-mhTrace = genericTrace mhStrategy
-
-nutsTrace :: Chain Double -> Handle -> IO ()
-nutsTrace = genericTrace nutsStrategy
-
-customTrace :: Chain Double -> Handle -> IO ()
-customTrace = genericTrace customStrategy
-
-jumpTrace :: Chain Double -> Handle -> IO ()
-jumpTrace = genericTrace occasionallyJump
-
-annealTrace :: Chain Double -> Handle -> IO ()
-annealTrace = genericTrace annealingStrategy
-
-mcmc = traceChain
-
-trace :: Int -> Chain Double -> Transition IO Double -> Handle -> IO ()
-trace n chain strategy h = do
-  prng <- create
-  samples <- mcmc n strategy chain prng
-  mapM_ (prettyPrint h) samples
-
-mhNutsStrategy :: PrimMonad m => Transition m Double
-mhNutsStrategy = do
-  firstWithProb 0.9
-    (metropolisHastings (Just 0.1))
-    nuts
-
-mhMalaStrategy :: PrimMonad m => Transition m Double
-mhMalaStrategy = do
-  firstWithProb 0.9
-    (metropolisHastings (Just 1.0))
-    (mala (Just 0.1))
-
-dissStrat1 = metropolisHastings (Just 0.1)
-dissChain1 = trace 10000 rosenbrockChain dissStrat1
-
-dissStrat2 = mhStrategy
-dissChain2 = trace 2000 rosenbrockChain dissStrat2
-
-dissStrat3 = metropolisHastings (Just 2.5)
-dissChain3 = trace 10000 rosenbrockChain dissStrat3
-
--- dissStrat4 = mhMalaStrategy
--- dissChain4 = trace 10000 rosenbrockChain dissStrat4
-
-main :: IO ()
-main = do
-  let chain  = bnnChain
-
-  h <- openFile "./test/trace1.dat" WriteMode
-  dissChain1 h
-  hClose h
-
-  h <- openFile "./test/trace2.dat" WriteMode
-  dissChain2 h
-  hClose h
-
-  h <- openFile "./test/trace3.dat" WriteMode
-  dissChain3 h
-  hClose h
-
-  -- h <- openFile "./test/trace4.dat" WriteMode
-  -- dissChain4 h
-  -- hClose h
 
