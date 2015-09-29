@@ -1,5 +1,6 @@
 require(coda)
 require(ggplot2)
+require(plyr)
 
 handles = c(
     "mh-rosenbrock"
@@ -39,40 +40,103 @@ handles = c(
 
   )
 
-worker = function(handle) {
-  d = read.csv(paste(handle, "dat", sep = "."),
-        header = F, colClasses = c('numeric', 'numeric'))
-  d[,3] = 1:nrow(d)
-  names(d) = c('x', 'y', 'epoch')
-  pdf(paste(handle, "pdf", sep = "."))
-    p = ggplot(d, aes(x, y)) + geom_point(aes(colour = epoch), alpha = 0.2)
-    print(p)
-    dev.off()
-  m = mcmc(data = d[,c(1,2)])
-  e = effectiveSize(m)
-  print(paste(handle, e))
+rosenbrocks = c(
+    'mh-rosenbrock'
+  , 'mh-radial-rosenbrock'
+  , 'hmc-rosenbrock'
+  , 'nuts-rosenbrock'
+  , 'custom-rosenbrock'
+  , 'random-rosenbrock'
+  )
+
+beales = c(
+    'mh-beale'
+  , 'mh-radial-beale'
+  , 'hmc-beale'
+  , 'nuts-beale'
+  , 'custom-beale'
+  , 'random-beale'
+  )
+
+himmelblaus = c(
+    'mh-himmelblau'
+  , 'mh-radial-himmelblau'
+  , 'hmc-himmelblau'
+  , 'nuts-himmelblau'
+  , 'custom-himmelblau'
+  , 'random-himmelblau'
+  )
+
+bnns = c(
+    'mh-bnn'
+  , 'mh-radial-bnn'
+  , 'hmc-bnn'
+  , 'nuts-bnn'
+  , 'custom-bnn'
+  , 'random-bnn'
+  )
+
+collater = function() {
+  l = list()
+  for (j in 1:length(handles)) {
+    d = read.csv(paste(handles[j], 'dat', sep = '.'), header = F,
+          colClasses = c('numeric', 'numeric'))
+    d[,3] = 1:nrow(d)
+    d[,4] = rep(handles[j], nrow(d))
+    names(d) = c('x', 'y', 'epoch', 'label')
+    l[[j]] = d
+    }
+
+  collated = ldply(l, data.frame)
+  collated[,4] = as.factor(collated[,4])
+  return(collated)
   }
 
-for (handle in handles) worker(handle)
+l = collater()
+
+rosenbrock = l[l$label %in% rosenbrocks,]
+beale      = l[l$label %in% beales,]
+himmelblau = l[l$label %in% himmelblaus,]
+bnn        = l[l$label %in% bnns,]
+
+worker = function(target, d) {
+  pdf(paste(target, 'pdf', sep = '.'))
+    p = ggplot(d, aes(x, y)) + geom_point(aes(colour = epoch), alpha = 0.2)
+    g = p + facet_wrap(~ label)
+    print(g)
+  dev.off()
+  }
+
+worker('rosenbrock', rosenbrock)
+worker('beale', beale)
+worker('himmelblau', himmelblau)
+worker('bnn', bnn)
 
 
 
-# consider ignoring 'jump' as it's similar to 'random'
 
-# on some problems like the rosenbrock function the nuts transition performs
-# quite well.  but comparable performance can be achieved by using less nuts
-# transitions, such as in the 'custom' transition.
-#
-# however the effective sample size doesn't tell the whole story.  consider
-# the beale density in which MH, HMC, and NUTS jump transitions report large
-# effective sample sizes.  yet they fail to traverse to a nearby but disparate
-# region of probability that is successfully located by the 'custom'
-# transitions.  notably the 'random' transition - also failed to locate these
-# regions.
-#
-# the custom and random transitions each do quite well on the BNN density.  most
-# of the primitive transitions also perform well, but are less efficient.  mh
-# does poorly, in particular.
-#
+
+
+# worker = function(handle) {
+#   d = read.csv(paste(handle, "dat", sep = "."),
+#         header = F, colClasses = c('numeric', 'numeric'))
+#   d[,3] = 1:nrow(d)
+#   names(d) = c('x', 'y', 'epoch')
+#   pdf(paste(handle, "pdf", sep = "."))
+#     p = ggplot(d, aes(x, y)) + geom_point(aes(colour = epoch), alpha = 0.2)
+#     print(p)
+#     dev.off()
+#   m = mcmc(data = d[,c(1,2)])
+#   e = effectiveSize(m)
+#   print(paste(handle, e))
+#   }
+
+
+
+# for (handle in handles) worker(handle)
+
+# so: want to specify ranges of handles
+# for each range, load all the (classified) data and
+
 
 

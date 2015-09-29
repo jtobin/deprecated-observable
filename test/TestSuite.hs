@@ -130,6 +130,17 @@ customStrategy = do
   slice 3.0
   nuts
 
+altCustomStrategy :: PrimMonad m => Transition m Double
+altCustomStrategy = do
+  firstWithProb 0.5
+    mhBaseStrategy
+    sliceBaseStrategy
+  slice 3.0
+  nuts
+
+sliceBaseStrategy :: PrimMonad m => Transition m Double
+sliceBaseStrategy = slice 1.0
+
 randomStrategy :: PrimMonad m => Transition m Double
 randomStrategy = frequency
   [ (5, metropolisHastings (Just 1.5))
